@@ -1,0 +1,235 @@
+# Terraform Provider OpenAPI (Dynamic)
+
+A dynamic Terraform provider that generates resource types at runtime from an OpenAPI specification.
+
+Point it at any OAS3 (version 3) spec and it exposes every discoverable resources as Terraform
+resources and data sources, with support for custom (`x-immutable`, `x-sensitive`, …) extensions.
+
+The provider is [published here][registry].
+
+It has been developped by the Cloud & Platform Engineering Team from the IT department of the
+State of Geneva (Switzerland).
+
+_This provider is built on the [Terraform Plugin Framework][tpf].
+See [Which SDK Should I Use?][sdk] in the Terraform documentation for additional information._
+
+
+## Why not dikhan/terraform-provider-openapi?
+
+[dikhan/terraform-provider-openapi](https://github.com/dikhan/terraform-provider-openapi) was
+evaluated but not used for three reasons:
+
+1. **Legacy SDK.** It is built on `terraform-plugin-sdk/v2`, which Hashicorp considers superseded.
+   This provider uses the current [Terraform Plugin Framework][tpf], the recommended path for new
+   and maintained providers.
+
+2. **OpenAPI 2 (Swagger) only.** dikhan's provider explicitly rejects OAS3 specs at runtime, and
+   no fork in its ecosystem has ever added OAS3 support. This provider targets OAS3 only, which
+   is what our internal APIs expose.
+
+3. **No active maintenance.** The upstream project has seen very little activity in recent years
+   and does not track the plugin-framework migration that Hashicorp has been pushing.
+
+
+## Requirements
+
+* [Terraform][terraform-downloads] >= 1.8
+* [Go][go-install] >= 1.24
+
+
+## How it works
+
+At startup the provider reads the spec identified by `OPENAPI_SPEC` and walks all paths. Pairs of
+paths like `/vlans/` + `/vlans/{id}/` are grouped into a single resource named `openapi_vlans`.
+The GET `200` response schema drives the Terraform schema; the POST request body determines which
+fields are writable.
+
+
+## Environment variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `OPENAPI_SPEC` | yes | Path or HTTPS URL to the OpenAPI 3 spec |
+| `OPENAPI_URL` | yes | Base URL of the API (e.g. `https://api.example.com/v1`) |
+| `OPENAPI_TOKEN` | no | Bearer token sent as `Authorization: Bearer …` |
+| `OPENAPI_INSECURE` | no | Set to `true` to skip TLS certificate verification |
+| `OPENAPI_PREFIX` | no | Resource type name prefix (default `openapi` → `openapi_<name>`) |
+| `OPENAPI_OK_LOG_LEVEL` | no | Log level for successful API calls (default `TRACE`) |
+| `OPENAPI_KO_LOG_LEVEL` | no | Log level for failed API calls (default `ERROR`) |
+
+
+## Provider configuration
+
+```hcl
+provider "openapi" {
+  url      = "https://api.example.com/v1"
+  token    = var.api_token # or OPENAPI_TOKEN
+  insecure = false
+  prefix   = "openapi" # must match OPENAPI_PREFIX
+}
+```
+
+All attributes are optional in the provider configuration block if the corresponding environment
+variable is set.
+
+The `prefix` is special: resource type names are fixed at init time from `OPENAPI_PREFIX`,
+the configuration value is only used for validation.
+
+
+## Resource discovery
+
+The provider groups OAS3 paths into resources using these rules:
+
+* A **collection path** (`/things/`) paired with an **item path** (`/things/{id}/`) becomes
+  resource `openapi_things`.
+* Multi-segment paths (`/a/b/`) become `openapi_a-b`.
+* A common path prefix shared by all paths (e.g. `/api/v1/`) is stripped before naming.
+* Resources without a GET `/{id}/` 200 response are silently skipped (no readable schema).
+
+
+## Field mapping
+
+| OAS3 property | Terraform behaviour |
+|---|---|
+| `readOnly: true` | `Computed: true`: server-managed, never sent in requests |
+| present in POST body | `Optional` / `Required` depending on OAS3 `required` |
+| absent from POST body | `Computed: true` |
+| `x-tf-id: "true"` | Used as the resource ID field (default: `id`) |
+| `x-immutable: "true"` | `RequiresReplace` plan modifier |
+| `x-sensitive: "true"` | Marked sensitive in Terraform state |
+| name contains `password`, `secret`, `token`, `api_key`, … | Auto-marked sensitive |
+
+
+## OAS3 extensions
+
+| Extension | Scope | Description |
+|---|---|---|
+| `x-tf-id` | field | Designates the resource identifier field |
+| `x-immutable` | field | Field cannot be changed after creation (forces replace) |
+| `x-sensitive` | field | Field value is redacted in plan and state |
+
+See [docs/architecture/extensions.md][extensions] for full documentation, naming rationale, and the extensions
+planned on the roadmap (`x-computed`, `x-ignore-order`, `x-tf-exclude`, `x-tf-status`).
+
+
+## Example
+
+Given a spec with:
+
+```yaml
+paths:
+  /vlans/:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                name: { type: string }
+                vlan_id: { type: integer, x-immutable: "true" }
+  /vlans/{id}/:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  id:    { type: integer }
+                  name:  { type: string }
+                  vlan_id: { type: integer, x-immutable: "true" }
+    patch: {}
+    delete: {}
+```
+
+The provider exposes:
+
+```hcl
+resource "openapi_vlans" "core" {
+  name    = "core-network"
+  vlan_id = 100   # immutable: changing this forces replacement
+}
+```
+
+
+## Building The Provider
+
+1. Clone the repository
+1. Enter the repository directory
+1. Build the provider using the Go `install` command:
+
+```shell
+go install
+```
+
+
+## Adding Dependencies
+
+This provider uses [Go modules](https://github.com/golang/go/wiki/Modules).
+Please see the Go documentation for the most up to date information about using Go modules.
+
+To add a new dependency `github.com/author/dependency` to your Terraform provider:
+
+```shell
+go get github.com/author/dependency
+go mod tidy
+```
+
+Then commit the changes to `go.mod` and `go.sum`.
+
+
+## Developing the Provider
+
+If you wish to work on the provider, you'll first need [Go][go-install] installed on your machine
+(see [Requirements](#requirements) above).
+
+To compile the provider, run `go install`. This will build the provider and put the provider
+binary in the `$GOPATH/bin` directory.
+
+To generate or update documentation, run `go generate ./...`.
+To format the code run `find . -name "*.go" -exec gofmt -s -w {} \;`.
+
+### Unit tests
+
+```shell
+go test ./...
+```
+
+### Linting
+
+```shell
+golangci-lint run --timeout 10m ./...
+```
+
+### Acceptance tests
+
+Acceptance tests create and destroy real resources on a live API instance.
+
+Set the required environment variables:
+
+```shell
+export OPENAPI_SPEC=/path/to/spec.yaml
+export OPENAPI_URL=https://api.example.com/v1
+export OPENAPI_TOKEN=my-token
+```
+
+Then run:
+
+```shell
+make testacc
+```
+
+### Running locally
+
+```shell
+go run . -debug   # expose debugger port for terraform-plugin-go
+```
+
+Use `TF_LOG=DEBUG` to see structured API call logs from the provider.
+
+[extensions]: docs/architecture/extensions.md
+[registry]: https://registry.terraform.io/providers/republique-et-canton-de-geneve/openapi/latest
+[tpf]: https://github.com/hashicorp/terraform-plugin-framework
+[sdk]: https://developer.hashicorp.com/terraform/plugin/framework-benefits
+[terraform-downloads]: https://developer.hashicorp.com/terraform/downloads
+[go-install]: https://golang.org/doc/install
