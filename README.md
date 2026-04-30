@@ -94,7 +94,6 @@ The provider groups OAS3 paths into resources using these rules:
 | `readOnly: true` | `Computed: true`: server-managed, never sent in requests |
 | present in POST body | `Optional` / `Required` depending on OAS3 `required` |
 | absent from POST body | `Computed: true` |
-| `x-tf-id: "true"` | Used as the resource ID field (default: `id`) |
 | `x-immutable: "true"` | `RequiresReplace` plan modifier |
 | `x-sensitive: "true"` | Marked sensitive in Terraform state |
 | name contains `password`, `secret`, `token`, `api_key`, … | Auto-marked sensitive |
@@ -104,12 +103,12 @@ The provider groups OAS3 paths into resources using these rules:
 
 | Extension | Scope | Description |
 |---|---|---|
-| `x-tf-id` | field | Designates the resource identifier field |
 | `x-immutable` | field | Field cannot be changed after creation (forces replace) |
 | `x-sensitive` | field | Field value is redacted in plan and state |
 
-See [docs/architecture/extensions.md][extensions] for full documentation, naming rationale, and the extensions
-planned on the roadmap (`x-computed`, `x-ignore-order`, `x-tf-exclude`, `x-tf-status`).
+See [docs/architecture/extensions/index.md][extensions] for full documentation, naming rationale,
+and the extensions planned on the roadmap (`x-computed`, `x-ignore-order`, `x-tf-exclude`,
+`x-tf-status`).
 
 
 ## Example
