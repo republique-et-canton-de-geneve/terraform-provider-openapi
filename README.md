@@ -82,7 +82,7 @@ The provider groups OAS3 paths into resources using these rules:
 
 * A **collection path** (`/things/`) paired with an **item path** (`/things/{id}/`) becomes
   resource `openapi_things`.
-* Multi-segment paths (`/a/b/`) become `openapi_a-b`.
+* Multi-segment paths (`/a/b/`) become `openapi_a_b`.
 * A common path prefix shared by all paths (e.g. `/api/v1/`) is stripped before naming.
 * Resources without a GET `/{id}/` 200 response are silently skipped (no readable schema).
 

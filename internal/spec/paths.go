@@ -15,7 +15,7 @@ func normalizePath(p string) string {
 	return p
 }
 
-// splitResourcePath strips the common prefix, then returns the dash-joined
+// splitResourcePath strips the common prefix, then returns the underscore-joined
 // non-param segments as the resource name and whether a path parameter follows.
 func splitResourcePath(path, prefix string) (string, bool) {
 	trimmed := strings.Trim(strings.TrimPrefix(path, prefix), "/")
@@ -31,7 +31,7 @@ func splitResourcePath(path, prefix string) (string, bool) {
 		}
 		parts = append(parts, p)
 	}
-	return strings.Join(parts, "-"), hasID
+	return strings.Join(parts, "_"), hasID
 }
 
 // findCommonPathPrefix returns the longest slash-delimited prefix shared by all

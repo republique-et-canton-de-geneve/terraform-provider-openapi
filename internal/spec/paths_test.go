@@ -59,7 +59,7 @@ func TestSplitResourcePath(t *testing.T) {
 	}{
 		{"/api/v1/widgets/", "/api/v1/", "widgets", false},
 		{"/api/v1/widgets/{id}/", "/api/v1/", "widgets", true},
-		{"/api/v1/network/vlans/{id}/", "/api/v1/", "network-vlans", true},
+		{"/api/v1/network/vlans/{id}/", "/api/v1/", "network_vlans", true},
 		{"/api/v1/", "/api/v1/", "", false},
 	}
 	for _, tt := range tests {
