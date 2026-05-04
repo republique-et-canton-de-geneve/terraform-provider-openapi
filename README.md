@@ -91,6 +91,7 @@ The provider groups OAS3 paths into resources using these rules:
 
 | OAS3 property | Terraform behaviour |
 |---|---|
+| camelCase name (e.g. `photoUrls`) | Converted to `snake_case` (`photo_urls`) |
 | `readOnly: true` | `Computed: true`: server-managed, never sent in requests |
 | present in POST body | `Optional` / `Required` depending on OAS3 `required` |
 | absent from POST body | `Computed: true` |
@@ -220,9 +221,72 @@ make testacc
 
 ### Running locally
 
+`go run . -debug` starts the provider as a long-running process and prints a
+`TF_REATTACH_PROVIDERS` value. Terraform picks that up and connects to your
+process instead of launching its own binary -- no installation step needed.
+
+**Terminal 1** -- start the provider:
+
 ```shell
-go run . -debug   # expose debugger port for terraform-plugin-go
+go run . -debug
+# Provider server started; to attach Terraform, set the TF_REATTACH_PROVIDERS
+# environment variable in your terminal session:
+#
+#   TF_REATTACH_PROVIDERS='{"registry.terraform.io/republique-et-canton-de-geneve/openapi":{"Protocol":"grpc","ProtocolVersion":6,"Pid":12345,"Test":true,"Addr":{"Network":"unix","String":"/tmp/plugin-123.sock"}}}'
 ```
+
+**Terminal 2** -- export the value printed above, then run Terraform normally:
+
+```shell
+# Using the public Swagger Petstore as a ready-made OAS3 target
+export OPENAPI_SPEC=https://petstore3.swagger.io/api/v3/openapi.json
+export OPENAPI_URL=https://petstore3.swagger.io/api/v3
+export TF_REATTACH_PROVIDERS='...'   # paste from terminal 1
+
+terraform init
+terraform plan
+```
+
+The provider discovers `openapi_pet`, `openapi_store_order`, and `openapi_user` from the
+Petstore spec at init time. A matching `main.tf`:
+
+```hcl
+terraform {
+  required_providers {
+    openapi = {
+      source = "registry.terraform.io/republique-et-canton-de-geneve/openapi"
+    }
+  }
+}
+
+provider "openapi" {}
+
+resource "openapi_pet" "clifford" {
+  name       = "Clifford"
+  photo_urls = ["https://example.com/clifford.jpg"]
+  status     = "available"
+  category   = {
+    id   = 1
+    name = "dog"
+  }
+  tags = [
+    { id = 1, name = "big" },
+    { id = 2, name = "red" },
+  ]
+}
+
+resource "openapi_store_order" "first" {
+  pet_id   = openapi_pet.clifford.id
+  quantity = 1
+  status   = "placed"
+}
+```
+
+OAS3 property names are converted to snake_case (`photoUrls` → `photo_urls`, `petId` → `pet_id`).
+The provider translates back to camelCase when writing to the API.
+
+The provider process in terminal 1 stays alive across multiple `terraform plan` or `apply` calls.
+Restart it (Ctrl-C, then `go run . -debug` again) whenever you rebuild after a code change.
 
 Use `TF_LOG=DEBUG` to see structured API call logs from the provider.
 
