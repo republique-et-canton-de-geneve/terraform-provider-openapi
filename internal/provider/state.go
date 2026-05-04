@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/republique-et-canton-de-geneve/terraform-provider-openapi/internal/spec"
 )
 
 // extractID reads the ID field from a state object, returning it as a string.
@@ -25,19 +26,35 @@ func extractID(obj types.Object, idField string) string {
 	return ""
 }
 
-// attrMapToJSON converts a Terraform attribute map to a JSON-serialisable map.
-func attrMapToJSON(attrs map[string]attr.Value) map[string]any {
+// attrMapToJSON converts a Terraform attribute map (snake_case keys) to a JSON-serialisable map
+// using OASName for API keys. Pass nil fields to use attribute names as-is (no name translation).
+func attrMapToJSON(attrs map[string]attr.Value, fields []*spec.FieldSpec) map[string]any {
+	byName := make(map[string]*spec.FieldSpec, len(fields))
+	for _, f := range fields {
+		byName[f.Name] = f
+	}
 	result := make(map[string]any, len(attrs))
 	for k, v := range attrs {
-		if val := attrToJSON(v); val != nil {
-			result[k] = val
+		f := byName[k]
+		oasKey := k
+		if f != nil {
+			oasKey = f.OASName
+		}
+		if val := attrToJSONField(v, f); val != nil {
+			result[oasKey] = val
 		}
 	}
 	return result
 }
 
-// attrToJSON converts a single Terraform attr.Value to its JSON-native equivalent.
+// attrToJSON converts a single Terraform attr.Value to its JSON-native equivalent without any
+// field-name translation. Kept for backward compat with simple cases.
 func attrToJSON(v attr.Value) any {
+	return attrToJSONField(v, nil)
+}
+
+// attrToJSONField is like attrToJSON but threads field spec for nested name mapping.
+func attrToJSONField(v attr.Value, f *spec.FieldSpec) any {
 	if v == nil || v.IsNull() || v.IsUnknown() {
 		return nil
 	}
@@ -51,28 +68,90 @@ func attrToJSON(v attr.Value) any {
 	case types.Bool:
 		return t.ValueBool()
 	case types.Object:
-		return attrMapToJSON(t.Attributes())
+		var nested []*spec.FieldSpec
+		if f != nil {
+			nested = f.Nested
+		}
+		return attrMapToJSON(t.Attributes(), nested)
 	case types.List:
 		elems := t.Elements()
 		result := make([]any, 0, len(elems))
+		var itemSpec *spec.FieldSpec
+		if f != nil {
+			itemSpec = f.ItemSpec
+		}
 		for _, e := range elems {
-			result = append(result, attrToJSON(e))
+			result = append(result, attrToJSONField(e, itemSpec))
 		}
 		return result
 	}
 	return fmt.Sprint(v)
 }
 
-// jsonToObject builds a types.Object from an API JSON response using the known attrTypes map.
+// jsonToObject builds a types.Object from an API JSON response.
+// fields drives the OASName→Name translation; pass nil to use attribute names as-is.
 func jsonToObject(
 	raw map[string]any,
+	fields []*spec.FieldSpec,
 	attrTypes map[string]attr.Type,
 ) (types.Object, diag.Diagnostics) {
 	attrs := make(map[string]attr.Value, len(attrTypes))
-	for name, attrType := range attrTypes {
-		attrs[name] = jsonToAttr(raw[name], attrType)
+	if len(fields) > 0 {
+		for _, f := range fields {
+			attrs[f.Name] = jsonToAttrField(raw[f.OASName], attrTypes[f.Name], f)
+		}
+	} else {
+		for name, attrType := range attrTypes {
+			attrs[name] = jsonToAttr(raw[name], attrType)
+		}
 	}
 	return types.ObjectValue(attrTypes, attrs)
+}
+
+// jsonToAttrField is like jsonToAttr but uses field spec for nested name mapping.
+func jsonToAttrField(v any, t attr.Type, f *spec.FieldSpec) attr.Value {
+	switch at := t.(type) {
+	case basetypes.ObjectType:
+		if v == nil {
+			return types.ObjectNull(at.AttrTypes)
+		}
+		if m, ok := v.(map[string]any); ok {
+			nested := make(map[string]attr.Value, len(at.AttrTypes))
+			if f != nil && len(f.Nested) > 0 {
+				for _, nf := range f.Nested {
+					nested[nf.Name] = jsonToAttrField(m[nf.OASName], at.AttrTypes[nf.Name], nf)
+				}
+			} else {
+				for name, nestedType := range at.AttrTypes {
+					nested[name] = jsonToAttr(m[name], nestedType)
+				}
+			}
+			obj, _ := types.ObjectValue(at.AttrTypes, nested)
+			return obj
+		}
+		return types.ObjectNull(at.AttrTypes)
+	case basetypes.ListType:
+		if v == nil {
+			list, _ := types.ListValue(at.ElemType, []attr.Value{})
+			return list
+		}
+		if arr, ok := v.([]any); ok {
+			elems := make([]attr.Value, len(arr))
+			var itemSpec *spec.FieldSpec
+			if f != nil {
+				itemSpec = f.ItemSpec
+			}
+			for i, item := range arr {
+				elems[i] = jsonToAttrField(item, at.ElemType, itemSpec)
+			}
+			list, _ := types.ListValue(at.ElemType, elems)
+			return list
+		}
+		list, _ := types.ListValue(at.ElemType, []attr.Value{})
+		return list
+	default:
+		return jsonToAttr(v, t)
+	}
 }
 
 // jsonToAttr converts a JSON-decoded value to the Terraform attr.Value matching type t.

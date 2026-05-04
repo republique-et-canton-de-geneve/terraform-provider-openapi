@@ -57,7 +57,8 @@ func (self *DynamicDataSource) Configure(
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected *Client, got: %T. Please report this issue to the provider developers.",
+			fmt.Sprintf(
+				"Expected *Client, got: %T. Please report this issue to the provider developers.",
 				req.ProviderData))
 		return
 	}
@@ -73,7 +74,9 @@ func (self *DynamicDataSource) Read(
 	if self.spec.ListPath == "" {
 		resp.Diagnostics.AddError(
 			"No Collection Endpoint",
-			fmt.Sprintf("Resource %q has no list path and cannot be used as a data source.", self.spec.Name))
+			fmt.Sprintf(
+				"Resource %q has no list path and cannot be used as a data source.",
+				self.spec.Name))
 		return
 	}
 
@@ -88,7 +91,7 @@ func (self *DynamicDataSource) Read(
 	itemsType := types.ObjectType{AttrTypes: self.attrTypes}
 	elems := make([]attr.Value, 0, len(raw))
 	for _, item := range raw {
-		obj, diags := jsonToObject(item, self.attrTypes)
+		obj, diags := jsonToObject(item, self.spec.Fields, self.attrTypes)
 		resp.Diagnostics.Append(diags...)
 		if resp.Diagnostics.HasError() {
 			return

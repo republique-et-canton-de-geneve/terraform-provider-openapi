@@ -140,7 +140,7 @@ func (self *OpenAPIProvider) Configure(
 		resp.Diagnostics.AddAttributeError(
 			fwpath.Root("url"),
 			"Missing OpenAPI API URL",
-			"Set the url in the provider configuration or use OPENAPI_URL and ensure its not empty.")
+			"Set the url in the provider configuration or use a non empty OPENAPI_URL.")
 		return
 	}
 

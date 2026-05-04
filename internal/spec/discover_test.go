@@ -164,6 +164,29 @@ paths:
           description: No Content
 `
 
+// --- toSnakeCase ---------------------------------------------------------------------------------
+
+func TestToSnakeCase(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"photoUrls", "photo_urls"},
+		{"petId", "pet_id"},
+		{"shipDate", "ship_date"},
+		{"firstName", "first_name"},
+		{"APIKey", "api_key"},
+		{"userStatus", "user_status"},
+		{"id", "id"},
+		{"name", "name"},
+		{"created_at", "created_at"}, // already snake_case
+		{"status", "status"},
+	}
+	for _, c := range cases {
+		t.Run(c.in, func(t *testing.T) {
+			if got := toSnakeCase(c.in); got != c.want {
+				t.Errorf("toSnakeCase(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
 
 // --- buildFieldSpec ------------------------------------------------------------------------------
 
@@ -212,74 +235,74 @@ func TestBuildFieldSpec(t *testing.T) {
 		wantItemType  string
 	}{
 		{
-			name: "writable required string",
+			name:       "writable required string",
 			schemaName: "SimpleString", fieldName: "name",
 			writable: true, required: true,
 			wantType: "string", wantWritable: true, wantRequired: true,
 			wantDesc: "a plain string",
 		},
 		{
-			name: "not writable becomes computed",
+			name:       "not writable becomes computed",
 			schemaName: "SimpleString", fieldName: "slug",
 			writable: false,
 			wantType: "string", wantComputed: true,
 		},
 		{
-			name: "readOnly overrides writable",
+			name:       "readOnly overrides writable",
 			schemaName: "ReadOnly", fieldName: "slug",
 			writable: true,
 			wantType: "string", wantComputed: true, wantWritable: false,
 		},
 		{
-			name: "x-immutable extension",
+			name:       "x-immutable extension",
 			schemaName: "Immutable", fieldName: "region",
 			writable: true,
 			wantType: "string", wantWritable: true, wantImmutable: true,
 		},
 		{
-			name: "x-sensitive true opt-in",
+			name:       "x-sensitive true opt-in",
 			schemaName: "Sensitive", fieldName: "vault_key",
 			writable: true,
 			wantType: "string", wantWritable: true, wantSensitive: true,
 		},
 		{
-			name: "x-sensitive false opt-out overrides name heuristic",
+			name:       "x-sensitive false opt-out overrides name heuristic",
 			schemaName: "SensitiveOptOut", fieldName: "token_count",
 			writable: true,
 			wantType: "string", wantWritable: true, wantSensitive: false,
 		},
 		{
-			name: "integer type",
+			name:       "integer type",
 			schemaName: "Integer", fieldName: "count",
 			writable: true,
 			wantType: "integer", wantWritable: true,
 		},
 		{
-			name: "number type",
+			name:       "number type",
 			schemaName: "Number", fieldName: "ratio",
 			writable: true,
 			wantType: "number", wantWritable: true,
 		},
 		{
-			name: "boolean type",
+			name:       "boolean type",
 			schemaName: "Boolean", fieldName: "enabled",
 			writable: true,
 			wantType: "boolean", wantWritable: true,
 		},
 		{
-			name: "object with nested properties",
+			name:       "object with nested properties",
 			schemaName: "ObjectNested", fieldName: "meta",
 			writable: true,
 			wantType: "object", wantWritable: true, wantNestedLen: 2,
 		},
 		{
-			name: "array of strings",
+			name:       "array of strings",
 			schemaName: "ArrayString", fieldName: "tags",
 			writable: true,
 			wantType: "array", wantWritable: true, wantItemType: "string",
 		},
 		{
-			name: "array of objects",
+			name:       "array of objects",
 			schemaName: "ArrayObject", fieldName: "entries",
 			writable: true,
 			wantType: "array", wantWritable: true, wantItemType: "object",
@@ -329,7 +352,6 @@ func TestBuildFieldSpec(t *testing.T) {
 	}
 }
 
-
 // --- buildFieldSpecs -----------------------------------------------------------------------------
 
 func TestBuildFieldSpecs(t *testing.T) {
@@ -342,7 +364,7 @@ func TestBuildFieldSpecs(t *testing.T) {
 	writeFields := map[string]bool{"name": true, "size": true}
 	byName := fieldsByName(buildFieldSpecs(proxy.Schema(), writeFields))
 
-	// id: not in write body, so computed; then marked IsID by buildFieldSpecs
+	// id: not in write body → Computed derived from OAS (not writable); IsID set by buildFieldSpecs
 	id := byName["id"]
 	if id == nil {
 		t.Fatal("id field missing")
@@ -351,10 +373,10 @@ func TestBuildFieldSpecs(t *testing.T) {
 		t.Error("id.IsID should be true")
 	}
 	if !id.Computed {
-		t.Error("id.Computed should be true")
+		t.Error("id.Computed should be true (id not in write body)")
 	}
 	if id.Writable {
-		t.Error("id.Writable should be false")
+		t.Error("id.Writable should be false (id not in write body)")
 	}
 	if id.Required {
 		t.Error("id.Required should be false (required && writable = false)")
@@ -403,6 +425,32 @@ func TestBuildFieldSpecs(t *testing.T) {
 	}
 }
 
+func TestBuildFieldSpecs_ClientSideID(t *testing.T) {
+	// When id is present in the POST body (not readOnly), it must be writable, the
+	// client supplies it. buildFieldSpecs must not force Computed=true in that case.
+	model := parseSpec(t, schemaComponentsYAML)
+	proxy, ok := model.Model.Components.Schemas.Get("Resource")
+	if !ok {
+		t.Fatal("Resource schema not found in test spec")
+	}
+
+	writeFields := map[string]bool{"id": true, "name": true, "size": true}
+	byName := fieldsByName(buildFieldSpecs(proxy.Schema(), writeFields))
+
+	id := byName["id"]
+	if id == nil {
+		t.Fatal("id field missing")
+	}
+	if !id.IsID {
+		t.Error("id.IsID should be true")
+	}
+	if !id.Writable {
+		t.Error("id.Writable should be true when id is in POST body")
+	}
+	if id.Computed {
+		t.Error("id.Computed should be false when id is in POST body (client-supplied)")
+	}
+}
 
 // --- DiscoverResources ---------------------------------------------------------------------------
 
@@ -584,6 +632,74 @@ paths:
 	}
 	if rs.ListPath != "" {
 		t.Errorf("ListPath = %q, want empty", rs.ListPath)
+	}
+}
+
+func TestDiscoverResources_CamelCaseFieldsConvertedToSnake(t *testing.T) {
+	specs := DiscoverResources(parseSpec(t, `
+openapi: "3.0.3"
+info:
+  title: Pets
+  version: "1"
+paths:
+  /pets/:
+    post:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                photoUrls:
+                  type: array
+                  items:
+                    type: string
+                petName:
+                  type: string
+      responses:
+        "201":
+          description: Created
+  /pets/{petId}/:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  petName:
+                    type: string
+                  photoUrls:
+                    type: array
+                    items:
+                      type: string
+    delete:
+      responses:
+        "204":
+          description: No Content
+`))
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 resource, got %d", len(specs))
+	}
+	byName := fieldsByName(specs[0].Fields)
+
+	petName := byName["pet_name"]
+	if petName == nil {
+		t.Fatal("field 'pet_name' missing (expected snake_case conversion of 'petName')")
+	}
+	if petName.OASName != "petName" {
+		t.Errorf("pet_name.OASName = %q, want %q", petName.OASName, "petName")
+	}
+
+	photoUrls := byName["photo_urls"]
+	if photoUrls == nil {
+		t.Fatal("field 'photo_urls' missing (expected snake_case conversion of 'photoUrls')")
+	}
+	if photoUrls.OASName != "photoUrls" {
+		t.Errorf("photo_urls.OASName = %q, want %q", photoUrls.OASName, "photoUrls")
 	}
 }
 

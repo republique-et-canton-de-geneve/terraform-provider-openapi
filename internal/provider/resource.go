@@ -58,7 +58,8 @@ func (self *DynamicResource) Configure(
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *Client, got: %T. Please report this issue to the provider developers.",
+			fmt.Sprintf(
+				"Expected *Client, got: %T. Please report this issue to the provider developers.",
 				req.ProviderData))
 		return
 	}
@@ -78,8 +79,13 @@ func (self *DynamicResource) Create(
 		return
 	}
 
-	body := attrMapToJSON(plan.Attributes())
-	delete(body, self.spec.IDField) // server assigns the ID
+	body := attrMapToJSON(plan.Attributes(), self.spec.Fields)
+	for _, f := range self.spec.Fields {
+		if f.IsID && !f.Writable {
+			delete(body, f.OASName) // server assigns the ID, strip it from the POST body
+			break
+		}
+	}
 
 	raw, err := self.client.Create(ctx, self.spec.ListPath, body)
 	if err != nil {
@@ -93,7 +99,7 @@ func (self *DynamicResource) Create(
 		map[string]any{"id": raw[self.spec.IDField]})
 
 	// Save created resource into Terraform state.
-	state, diags := jsonToObject(raw, self.attrTypes)
+	state, diags := jsonToObject(raw, self.spec.Fields, self.attrTypes)
 	resp.Diagnostics.Append(diags...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
@@ -132,7 +138,7 @@ func (self *DynamicResource) Read(
 	}
 
 	// Save updated resource into Terraform state.
-	newState, diags := jsonToObject(raw, self.attrTypes)
+	newState, diags := jsonToObject(raw, self.spec.Fields, self.attrTypes)
 	resp.Diagnostics.Append(diags...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, newState)...)
 }
@@ -164,8 +170,13 @@ func (self *DynamicResource) Update(
 		return
 	}
 
-	body := attrMapToJSON(plan.Attributes())
-	delete(body, self.spec.IDField)
+	body := attrMapToJSON(plan.Attributes(), self.spec.Fields)
+	for _, f := range self.spec.Fields {
+		if f.IsID {
+			delete(body, f.OASName) // never send the ID in an update body
+			break
+		}
+	}
 
 	method := self.spec.UpdateMethod
 	if method == "" {
@@ -183,7 +194,7 @@ func (self *DynamicResource) Update(
 	tflog.Debug(ctx, fmt.Sprintf("Updated %s %s successfully", self.spec.Name, id))
 
 	// Save updated resource into Terraform state.
-	newState, diags := jsonToObject(raw, self.attrTypes)
+	newState, diags := jsonToObject(raw, self.spec.Fields, self.attrTypes)
 	resp.Diagnostics.Append(diags...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, newState)...)
 }

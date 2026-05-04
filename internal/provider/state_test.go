@@ -5,6 +5,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/republique-et-canton-de-geneve/terraform-provider-openapi/internal/spec"
 )
 
 // --- extractID -----------------------------------------------------------------------------------
@@ -124,7 +125,7 @@ func TestAttrToJSON_list_null_elem_omitted(t *testing.T) {
 		types.StringValue("keep"),
 		types.StringNull(),
 	})
-	result := attrMapToJSON(map[string]attr.Value{"tags": list})
+	result := attrMapToJSON(map[string]attr.Value{"tags": list}, nil)
 	tags, ok := result["tags"].([]any)
 	if !ok {
 		t.Fatal("expected []any")
@@ -301,7 +302,7 @@ func TestJsonToObject_roundtrip(t *testing.T) {
 		"count":   float64(5),
 		"enabled": true,
 	}
-	obj, diags := jsonToObject(raw, attrTypes)
+	obj, diags := jsonToObject(raw, nil, attrTypes)
 	if diags.HasError() {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -319,11 +320,73 @@ func TestJsonToObject_roundtrip(t *testing.T) {
 
 func TestJsonToObject_missing_keys_become_null(t *testing.T) {
 	attrTypes := map[string]attr.Type{"name": types.StringType}
-	obj, diags := jsonToObject(map[string]any{}, attrTypes)
+	obj, diags := jsonToObject(map[string]any{}, nil, attrTypes)
 	if diags.HasError() {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
 	if !obj.Attributes()["name"].IsNull() {
 		t.Fatal("expected null for missing key")
+	}
+}
+
+func TestJsonToObject_camelCase_name_mapping(t *testing.T) {
+	// API returns camelCase; Terraform state must use snake_case.
+	fields := []*spec.FieldSpec{
+		{Name: "id", OASName: "id", IsID: true},
+		{Name: "photo_urls", OASName: "photoUrls", Type: "array",
+			ItemSpec: &spec.FieldSpec{Name: "item", OASName: "item", Type: "string"}},
+		{Name: "pet_id", OASName: "petId", Type: "integer"},
+	}
+	attrTypes := map[string]attr.Type{
+		"id":         types.StringType,
+		"photo_urls": types.ListType{ElemType: types.StringType},
+		"pet_id":     types.Int64Type,
+	}
+	raw := map[string]any{
+		"id":        "abc",
+		"photoUrls": []any{"https://example.com/a.jpg"},
+		"petId":     float64(7),
+	}
+	obj, diags := jsonToObject(raw, fields, attrTypes)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	attrs := obj.Attributes()
+	if attrs["id"] != types.StringValue("abc") {
+		t.Fatalf("id: got %v", attrs["id"])
+	}
+	if attrs["pet_id"] != types.Int64Value(7) {
+		t.Fatalf("pet_id: got %v", attrs["pet_id"])
+	}
+	list, ok := attrs["photo_urls"].(types.List)
+	if !ok || list.IsNull() || len(list.Elements()) != 1 {
+		t.Fatalf("photo_urls: got %v", attrs["photo_urls"])
+	}
+}
+
+func TestAttrMapToJSON_camelCase_name_mapping(t *testing.T) {
+	// Terraform plan uses snake_case; JSON body sent to API must use camelCase.
+	fields := []*spec.FieldSpec{
+		{Name: "photo_urls", OASName: "photoUrls", Type: "array",
+			ItemSpec: &spec.FieldSpec{Name: "item", OASName: "item", Type: "string"}},
+		{Name: "pet_id", OASName: "petId", Type: "integer"},
+	}
+	list, _ := types.ListValue(types.StringType, []attr.Value{types.StringValue("https://example.com/a.jpg")})
+	attrs := map[string]attr.Value{
+		"photo_urls": list,
+		"pet_id":     types.Int64Value(7),
+	}
+	result := attrMapToJSON(attrs, fields)
+	if _, ok := result["photo_urls"]; ok {
+		t.Error("snake_case key 'photo_urls' must not appear in JSON output")
+	}
+	if _, ok := result["pet_id"]; ok {
+		t.Error("snake_case key 'pet_id' must not appear in JSON output")
+	}
+	if result["photoUrls"] == nil {
+		t.Error("camelCase key 'photoUrls' must appear in JSON output")
+	}
+	if result["petId"] != int64(7) {
+		t.Fatalf("petId: got %v", result["petId"])
 	}
 }

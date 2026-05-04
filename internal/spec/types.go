@@ -8,8 +8,9 @@ type FieldSpec struct {
 
 	// Identity
 
-	Name string
-	IsID bool // field named "id"; x-primary-key will supersede this when implemented
+	Name    string // Terraform attribute name (snake_case)
+	OASName string // original OAS3 property name (camelCase)
+	IsID    bool   // field named "id"; x-primary-key will supersede this when implemented
 
 	// Type
 

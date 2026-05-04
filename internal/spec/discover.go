@@ -1,6 +1,9 @@
 package spec
 
 import (
+	"strings"
+	"unicode"
+
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
@@ -17,8 +20,8 @@ type resourceGroup struct {
 	itemPath *pathInfo
 }
 
-// DiscoverResources walks the OAS3 paths and returns a ResourceSpec for each
-// detected resource (collection + item path pair with a readable item schema).
+// DiscoverResources walks the OAS3 paths and returns a ResourceSpec for each detected resource
+// (collection + item path pair with a readable item schema).
 func DiscoverResources(model *libopenapi.DocumentModel[v3high.Document]) []*ResourceSpec {
 	if model == nil || model.Model.Paths == nil {
 		return nil
@@ -167,8 +170,6 @@ func buildFieldSpecs(schema *base.Schema, writeFields map[string]bool) []*FieldS
 	for _, f := range fields {
 		if f.Name == "id" {
 			f.IsID = true
-			f.Computed = true
-			f.Writable = false
 			break
 		}
 	}
@@ -176,9 +177,34 @@ func buildFieldSpecs(schema *base.Schema, writeFields map[string]bool) []*FieldS
 	return fields
 }
 
+// toSnakeCase converts a camelCase or PascalCase string to snake_case.
+// "photoUrls" → "photo_urls", "petId" → "pet_id", "APIKey" → "api_key".
+// Already-snake strings pass through unchanged.
+func toSnakeCase(s string) string {
+	runes := []rune(s)
+	var b strings.Builder
+	for i, r := range runes {
+		if unicode.IsUpper(r) {
+			if i > 0 {
+				prev := runes[i-1]
+				// Standard camelCase boundary (lower→upper): "petId" → "pet_Id"
+				// Acronym end (upper+upper→lower): "APIKey" → "API_Key"
+				if unicode.IsLower(prev) ||
+					(unicode.IsUpper(prev) && i+1 < len(runes) && unicode.IsLower(runes[i+1])) {
+					b.WriteByte('_')
+				}
+			}
+			b.WriteRune(unicode.ToLower(r))
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 // buildFieldSpec converts a single OAS3 property schema into a FieldSpec.
 func buildFieldSpec(name string, schema *base.Schema, writable, required bool) *FieldSpec {
-	f := &FieldSpec{Name: name}
+	f := &FieldSpec{OASName: name, Name: toSnakeCase(name)}
 
 	// Type
 	if schema == nil {
@@ -231,8 +257,8 @@ func buildFieldSpec(name string, schema *base.Schema, writable, required bool) *
 	return f
 }
 
-// detectType infers the primary OAS3 type from a schema, preferring structural
-// cues (items means array, properties means object) over the declared type string.
+// detectType infers the primary OAS3 type from a schema, preferring structural cues
+// (items means array, properties means object) over the declared type string.
 func detectType(schema *base.Schema) string {
 	// Items present: treat as array (checked before properties to handle array-of-objects)
 	if schema.Items != nil {
