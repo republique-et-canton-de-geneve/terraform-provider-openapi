@@ -15,8 +15,8 @@ func normalizePath(p string) string {
 	return p
 }
 
-// splitResourcePath strips the common prefix, then returns the underscore-joined
-// non-param segments as the resource name and whether a path parameter follows.
+// splitResourcePath strips the common prefix, then returns the underscore-joined non-param segments
+// as the resource name and whether a path parameter follows.
 func splitResourcePath(path, prefix string) (string, bool) {
 	trimmed := strings.Trim(strings.TrimPrefix(path, prefix), "/")
 	if trimmed == "" {
@@ -34,8 +34,8 @@ func splitResourcePath(path, prefix string) (string, bool) {
 	return strings.Join(parts, "_"), hasID
 }
 
-// findCommonPathPrefix returns the longest slash-delimited prefix shared by all
-// paths, provided stripping it leaves every path with at least one non-param segment.
+// findCommonPathPrefix returns the longest slash-delimited prefix shared by all paths,
+// provided stripping it leaves every path with at least one non-param segment.
 func findCommonPathPrefix(paths []string) string {
 	if len(paths) < 2 {
 		return ""
@@ -60,8 +60,8 @@ func findCommonPathPrefix(paths []string) string {
 	}
 }
 
-// isValidPathPrefix returns true if stripping prefix leaves every path with a
-// non-empty, non-param first segment.
+// isValidPathPrefix returns true if stripping prefix leaves every path with a non-empty,
+// non-param first segment.
 func isValidPathPrefix(prefix string, paths []string) bool {
 	for _, p := range paths {
 		rest := strings.Trim(strings.TrimPrefix(p, prefix), "/")

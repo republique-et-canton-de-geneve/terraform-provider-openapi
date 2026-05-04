@@ -2,7 +2,6 @@ package spec
 
 import "testing"
 
-
 // --- isSensitiveField ----------------------------------------------------------------------------
 
 func TestIsSensitiveField(t *testing.T) {
@@ -35,7 +34,8 @@ func TestIsSensitiveField(t *testing.T) {
 		{"created_at", "created_at", false},
 		{"public_key", "public_key", false},
 
-		// Name heuristic matches even when keyword is a substring; use x-sensitive: false to opt out.
+		// Name heuristic matches even when keyword is a substring.
+		// Use x-sensitive: false to opt out.
 		{"token_count matches token keyword", "token_count", true},
 	}
 

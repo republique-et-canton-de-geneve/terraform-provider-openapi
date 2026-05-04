@@ -19,7 +19,6 @@ paths: {}
 
 // --- readSource ----------------------------------------------------------------------------------
 
-
 func TestReadSource_File(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "spec.yaml")
 	if err := os.WriteFile(path, []byte("hello: world"), 0600); err != nil {
@@ -69,9 +68,7 @@ func TestReadSource_HTTPError(t *testing.T) {
 	}
 }
 
-
 // --- LoadModel -----------------------------------------------------------------------------------
-
 
 func TestLoadModel_ValidFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "spec.yaml")

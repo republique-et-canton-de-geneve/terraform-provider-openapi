@@ -66,8 +66,8 @@ func fieldToDSAttr(f *spec.FieldSpec) dsschema.Attribute {
 	}
 }
 
-// buildSchema converts a slice of FieldSpecs to a Terraform schema and a
-// parallel attrTypes map used for state encoding/decoding.
+// buildSchema converts a slice of FieldSpecs to a Terraform schema and a parallel attrTypes map
+// used for state encoding/decoding.
 func buildSchema(fields []*spec.FieldSpec) (schema.Schema, map[string]attr.Type) {
 	attributes := make(map[string]schema.Attribute, len(fields))
 	attrTypes := make(map[string]attr.Type, len(fields))
@@ -107,8 +107,8 @@ func fieldToAttrType(f *spec.FieldSpec) attr.Type {
 	}
 }
 
-// fieldToSchemaAttr converts a FieldSpec to the appropriate Terraform schema
-// attribute, applying plan modifiers for immutable and computed fields.
+// fieldToSchemaAttr converts a FieldSpec to the appropriate Terraform schema attribute,
+// applying plan modifiers for immutable and computed fields.
 func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 	// ID field: always computed string, preserved across plan/apply cycles.
 	if f.IsID {

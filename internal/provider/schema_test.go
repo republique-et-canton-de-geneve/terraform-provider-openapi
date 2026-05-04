@@ -140,7 +140,13 @@ func TestFieldToSchemaAttr_computed_readonly(t *testing.T) {
 }
 
 func TestFieldToSchemaAttr_immutable_string(t *testing.T) {
-	f := &spec.FieldSpec{Name: "region", Type: "string", Writable: true, Required: true, Immutable: true}
+	f := &spec.FieldSpec{
+		Name:      "region",
+		Type:      "string",
+		Writable:  true,
+		Required:  true,
+		Immutable: true,
+	}
 	got := fieldToSchemaAttr(f)
 	attr, ok := got.(schema.StringAttribute)
 	if !ok {
@@ -172,7 +178,13 @@ func TestFieldToSchemaAttr_integer(t *testing.T) {
 }
 
 func TestFieldToSchemaAttr_integer_immutable(t *testing.T) {
-	f := &spec.FieldSpec{Name: "port", Type: "integer", Writable: true, Required: true, Immutable: true}
+	f := &spec.FieldSpec{
+		Name:      "port",
+		Type:      "integer",
+		Writable:  true,
+		Required:  true,
+		Immutable: true,
+	}
 	got := fieldToSchemaAttr(f)
 	attr, ok := got.(schema.Int64Attribute)
 	if !ok {
@@ -217,7 +229,11 @@ func TestFieldToSchemaAttr_object(t *testing.T) {
 		Type:     "object",
 		Writable: true,
 		Nested: []*spec.FieldSpec{
-			{Name: "key", Type: "string", Writable: true},
+			{
+				Name:     "key",
+				Type:     "string",
+				Writable: true,
+			},
 		},
 	}
 	got := fieldToSchemaAttr(f)
@@ -256,7 +272,11 @@ func TestFieldToSchemaAttr_array_of_objects(t *testing.T) {
 			Name: "",
 			Type: "object",
 			Nested: []*spec.FieldSpec{
-				{Name: "name", Type: "string", Writable: true},
+				{
+					Name:     "name",
+					Type:     "string",
+					Writable: true,
+				},
 			},
 		},
 	}

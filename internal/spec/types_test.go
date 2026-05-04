@@ -2,7 +2,6 @@ package spec
 
 import "testing"
 
-
 // --- ResolvedItemPath ----------------------------------------------------------------------------
 
 func TestResolvedItemPath(t *testing.T) {

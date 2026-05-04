@@ -100,8 +100,8 @@ func (self *Client) Update(
 }
 
 // List GETs the collection path and returns items as a slice of maps.
-// Handles both a direct JSON array response and an object wrapping an array in
-// any of its top-level keys (e.g. {"results": [...]} or {"items": [...]}).
+// Handles both a direct JSON array response and an object wrapping an array in any of its top-level
+// keys (e.g. {"results": [...]} or {"items": [...]}).
 func (self *Client) List(ctx context.Context, path string) ([]map[string]any, error) {
 	var raw any
 	resp, err := self.resty.R().SetResult(&raw).Get(path)
@@ -144,7 +144,8 @@ func (self *Client) Delete(ctx context.Context, path string) error {
 	for attempt := 0; attempt <= conflictMaxAttempts; attempt++ {
 		resp, err := self.resty.R().Delete(path)
 		if err = self.handle(ctx, resp, err, http.StatusNoContent, http.StatusOK); err != nil {
-			if attempt < conflictMaxAttempts && resp != nil && resp.StatusCode() == http.StatusConflict {
+			if attempt < conflictMaxAttempts && resp != nil &&
+				resp.StatusCode() == http.StatusConflict {
 				time.Sleep(3 * time.Second)
 				continue
 			}
@@ -168,8 +169,8 @@ func (self *Client) Delete(ctx context.Context, path string) error {
 		conflictMaxAttempts)
 }
 
-// handle checks the response status against expected codes, logs the call, and
-// returns a descriptive error if the status does not match.
+// handle checks the response status against expected codes, logs the call, and returns a
+// descriptive error if the status does not match.
 func (self *Client) handle(
 	ctx context.Context,
 	resp *resty.Response,

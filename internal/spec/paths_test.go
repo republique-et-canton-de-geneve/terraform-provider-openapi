@@ -2,7 +2,6 @@ package spec
 
 import "testing"
 
-
 // --- normalizePath -------------------------------------------------------------------------------
 
 func TestNormalizePath(t *testing.T) {
@@ -23,7 +22,6 @@ func TestNormalizePath(t *testing.T) {
 		})
 	}
 }
-
 
 // --- commonStrPrefix -----------------------------------------------------------------------------
 
@@ -46,7 +44,6 @@ func TestCommonStrPrefix(t *testing.T) {
 		})
 	}
 }
-
 
 // --- splitResourcePath ---------------------------------------------------------------------------
 
@@ -73,7 +70,6 @@ func TestSplitResourcePath(t *testing.T) {
 	}
 }
 
-
 // --- findCommonPathPrefix ------------------------------------------------------------------------
 
 func TestFindCommonPathPrefix(t *testing.T) {
@@ -89,7 +85,12 @@ func TestFindCommonPathPrefix(t *testing.T) {
 		},
 		{
 			"two resources under shared prefix",
-			[]string{"/api/v1/widgets/", "/api/v1/widgets/{id}/", "/api/v1/things/", "/api/v1/things/{id}/"},
+			[]string{
+				"/api/v1/widgets/",
+				"/api/v1/widgets/{id}/",
+				"/api/v1/things/",
+				"/api/v1/things/{id}/",
+			},
 			"/api/v1/",
 		},
 		{

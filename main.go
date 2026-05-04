@@ -16,10 +16,14 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "run with debugger support")
 	flag.Parse()
 
-	err := providerserver.Serve(context.Background(), provider.New(version), providerserver.ServeOpts{
-		Address: "registry.terraform.io/republique-et-canton-de-geneve/openapi",
-		Debug:   debug,
-	})
+	err := providerserver.Serve(
+		context.Background(),
+		provider.New(version),
+		providerserver.ServeOpts{
+			Address: "registry.terraform.io/republique-et-canton-de-geneve/openapi",
+			Debug:   debug,
+		},
+	)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
