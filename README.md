@@ -186,18 +186,18 @@ To compile the provider, run `go install`. This will build the provider and put 
 binary in the `$GOPATH/bin` directory.
 
 To generate or update documentation, run `go generate ./...`.
-To format the code run `find . -name "*.go" -exec gofmt -s -w {} \;`.
+To format the code run `make fmt`.
 
 ### Unit tests
 
 ```shell
-go test ./...
+make test
 ```
 
 ### Linting
 
 ```shell
-golangci-lint run --timeout 10m ./...
+make lint
 ```
 
 ### Acceptance tests
