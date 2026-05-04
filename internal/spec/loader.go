@@ -21,9 +21,9 @@ func LoadModel(source string) (*libopenapi.DocumentModel[v3high.Document], error
 	if err != nil {
 		return nil, fmt.Errorf("parsing spec: %w", err)
 	}
-	model, errs := doc.BuildV3Model()
-	if len(errs) > 0 {
-		return nil, fmt.Errorf("building v3 model: %w", errs[0])
+	model, err := doc.BuildV3Model()
+	if err != nil {
+		return nil, fmt.Errorf("building v3 model: %w", err)
 	}
 	return model, nil
 }

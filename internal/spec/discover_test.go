@@ -16,9 +16,9 @@ func parseSpec(t *testing.T, yaml string) *libopenapi.DocumentModel[v3high.Docum
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	model, errs := doc.BuildV3Model()
-	if len(errs) > 0 {
-		t.Fatalf("BuildV3Model: %v", errs[0])
+	model, err := doc.BuildV3Model()
+	if err != nil {
+		t.Fatalf("BuildV3Model: %v", err)
 	}
 	return model
 }
