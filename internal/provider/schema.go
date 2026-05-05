@@ -1,6 +1,11 @@
 package provider
 
 import (
+	"math"
+	"regexp"
+
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	dsschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -8,6 +13,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/republique-et-canton-de-geneve/terraform-provider-openapi/internal/spec"
 )
@@ -107,6 +113,36 @@ func fieldToAttrType(f *spec.FieldSpec) attr.Type {
 	}
 }
 
+// stringValidators builds string validators from a FieldSpec's constraints.
+func stringValidators(f *spec.FieldSpec) []validator.String {
+	var vals []validator.String
+	if f.MinLength != nil {
+		vals = append(vals, stringvalidator.LengthAtLeast(int(*f.MinLength)))
+	}
+	if f.MaxLength != nil {
+		vals = append(vals, stringvalidator.LengthAtMost(int(*f.MaxLength)))
+	}
+	if f.Pattern != "" {
+		vals = append(vals, stringvalidator.RegexMatches(regexp.MustCompile(f.Pattern), ""))
+	}
+	if len(f.Enum) > 0 {
+		vals = append(vals, stringvalidator.OneOf(f.Enum...))
+	}
+	return vals
+}
+
+// int64Validators builds int64 validators from a FieldSpec's constraints.
+func int64Validators(f *spec.FieldSpec) []validator.Int64 {
+	var vals []validator.Int64
+	if f.Minimum != nil && *f.Minimum > math.MinInt64 {
+		vals = append(vals, int64validator.AtLeast(int64(*f.Minimum)))
+	}
+	if f.Maximum != nil && *f.Maximum < math.MaxInt64 {
+		vals = append(vals, int64validator.AtMost(int64(*f.Maximum)))
+	}
+	return vals
+}
+
 // fieldToSchemaAttr converts a FieldSpec to the appropriate Terraform schema attribute,
 // applying plan modifiers for immutable and computed fields.
 func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
@@ -137,6 +173,7 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 			Optional:            optional,
 			Computed:            computed,
 			PlanModifiers:       planMods,
+			Validators:          int64Validators(f),
 		}
 	case "number":
 		return schema.Float64Attribute{
@@ -208,6 +245,7 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 			Computed:            computed,
 			Sensitive:           f.Sensitive,
 			PlanModifiers:       planMods,
+			Validators:          stringValidators(f),
 		}
 	}
 }

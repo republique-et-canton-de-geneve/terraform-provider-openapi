@@ -65,7 +65,8 @@ func DiscoverResources(model *libopenapi.DocumentModel[v3high.Document]) []*Reso
 
 // buildResourceSpec assembles a ResourceSpec from the list and item path entries.
 func buildResourceSpec(name string, listInfo, itemInfo *pathInfo) *ResourceSpec {
-	rs := &ResourceSpec{Name: name}
+	singular := singularizeName(name)
+	rs := &ResourceSpec{SingularName: singular, PluralName: pluralizeName(singular)}
 
 	// Paths
 	if listInfo != nil {
@@ -178,7 +179,7 @@ func buildFieldSpecs(schema *base.Schema, writeFields map[string]bool) []*FieldS
 }
 
 // toSnakeCase converts a camelCase or PascalCase string to snake_case.
-// "photoUrls" → "photo_urls", "petId" → "pet_id", "APIKey" → "api_key".
+// "photoUrls" -> "photo_urls", "petId" -> "pet_id", "APIKey" -> "api_key".
 // Already-snake strings pass through unchanged.
 func toSnakeCase(s string) string {
 	runes := []rune(s)
@@ -187,8 +188,8 @@ func toSnakeCase(s string) string {
 		if unicode.IsUpper(r) {
 			if i > 0 {
 				prev := runes[i-1]
-				// Standard camelCase boundary (lower→upper): "petId" → "pet_Id"
-				// Acronym end (upper+upper→lower): "APIKey" → "API_Key"
+				// Standard camelCase boundary (lower->upper): "petId" -> "pet_Id"
+				// Acronym end (upper+upper->lower): "APIKey" -> "API_Key"
 				if unicode.IsLower(prev) ||
 					(unicode.IsUpper(prev) && i+1 < len(runes) && unicode.IsLower(runes[i+1])) {
 					b.WriteByte('_')
@@ -237,6 +238,24 @@ func buildFieldSpec(name string, schema *base.Schema, writable, required bool) *
 	// Metadata
 	f.Description = schema.Description
 
+	// Validation constraints
+	if schema.MaxLength != nil {
+		f.MaxLength = schema.MaxLength
+	}
+	if schema.MinLength != nil {
+		f.MinLength = schema.MinLength
+	}
+	if schema.Pattern != "" {
+		f.Pattern = schema.Pattern
+	}
+	if schema.Minimum != nil {
+		f.Minimum = schema.Minimum
+	}
+	if schema.Maximum != nil {
+		f.Maximum = schema.Maximum
+	}
+	f.Enum = extractEnumValues(schema)
+
 	// Nested fields for objects
 	if f.Type == "object" && schema.Properties != nil {
 		nestedRequired := map[string]bool{}
@@ -255,6 +274,44 @@ func buildFieldSpec(name string, schema *base.Schema, writable, required bool) *
 	}
 
 	return f
+}
+
+// extractEnumValues collects allowed string values from a schema's enum, allOf, or oneOf.
+// Handles the DRF pattern of allOf:[{$ref:SomeEnum}] and oneOf:[{$ref:A},{$ref:B}].
+func extractEnumValues(schema *base.Schema) []string {
+	if schema == nil {
+		return nil
+	}
+	if vals := enumFromSchema(schema); len(vals) > 0 {
+		return vals
+	}
+	if len(schema.AllOf) == 1 {
+		if inner := schema.AllOf[0].Schema(); inner != nil {
+			if vals := enumFromSchema(inner); len(vals) > 0 {
+				return vals
+			}
+		}
+	}
+	if len(schema.OneOf) > 0 {
+		var result []string
+		for _, proxy := range schema.OneOf {
+			if inner := proxy.Schema(); inner != nil {
+				result = append(result, enumFromSchema(inner)...)
+			}
+		}
+		return result
+	}
+	return nil
+}
+
+func enumFromSchema(schema *base.Schema) []string {
+	var vals []string
+	for _, node := range schema.Enum {
+		if node != nil {
+			vals = append(vals, node.Value)
+		}
+	}
+	return vals
 }
 
 // detectType infers the primary OAS3 type from a schema, preferring structural cues
