@@ -86,6 +86,17 @@ The provider groups OAS3 paths into resources using these rules:
 * A common path prefix shared by all paths (e.g. `/api/v1/`) is stripped before naming.
 * Resources without a GET `/{id}/` 200 response are silently skipped (no readable schema).
 
+### Singular vs plural naming
+
+The last word of the path segment is inflected automatically:
+
+* **Resources** use the **singular** form: `/vlans/{id}/` -> `resource "openapi_vlan"`
+* **Data sources** use the **plural** form: `/vlans/` -> `data "openapi_vlans"`
+
+Multi-segment paths follow the same rule on the last segment only:
+`/linux-vm/instances/{id}/` -> `resource "openapi_linux_vm_instance"` /
+`data "openapi_linux_vm_instances"`. Hyphens in path segments are replaced with underscores.
+
 
 ## Field mapping
 
@@ -98,6 +109,15 @@ The provider groups OAS3 paths into resources using these rules:
 | `x-immutable: "true"` | `RequiresReplace` plan modifier |
 | `x-sensitive: "true"` | Marked sensitive in Terraform state |
 | name contains `password`, `secret`, `token`, `api_key`, … | Auto-marked sensitive |
+
+
+## Validation
+
+OAS3 schema constraints (`maxLength`, `minLength`, `pattern`, `minimum`, `maximum`, `enum`) are
+automatically translated into Terraform validators applied at plan time. Enum values expressed via
+`$ref`, `allOf`, or `oneOf` are all recognised.
+
+See [docs/validators.md][validators] for the full list and enum pattern details.
 
 
 ## OAS3 extensions
@@ -290,6 +310,7 @@ Restart it (Ctrl-C, then `go run . -debug` again) whenever you rebuild after a c
 
 Use `TF_LOG=DEBUG` to see structured API call logs from the provider.
 
+[validators]: docs/validators.md
 [extensions]: docs/architecture/extensions/index.md
 [registry]: https://registry.terraform.io/providers/republique-et-canton-de-geneve/openapi/latest
 [tpf]: https://github.com/hashicorp/terraform-plugin-framework
