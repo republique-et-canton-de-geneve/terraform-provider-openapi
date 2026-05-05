@@ -29,7 +29,7 @@ func splitResourcePath(path, prefix string) (string, bool) {
 			hasID = true
 			break
 		}
-		parts = append(parts, p)
+		parts = append(parts, strings.ReplaceAll(p, "-", "_"))
 	}
 	return strings.Join(parts, "_"), hasID
 }
