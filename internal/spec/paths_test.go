@@ -72,6 +72,60 @@ func TestSplitResourcePath(t *testing.T) {
 	}
 }
 
+func TestPluralizeName(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"widget", "widgets"},
+		{"network_vlan", "network_vlans"},
+		{"linux_vm_instance", "linux_vm_instances"},
+		{"entry", "entries"},
+		// common IT path words
+		{"proxy", "proxies"},
+		{"policy", "policies"},
+		{"registry", "registries"},
+		{"cache", "caches"},
+		{"queue", "queues"},
+		{"status", "statuses"},
+		{"address", "addresses"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			if got := pluralizeName(tt.in); got != tt.want {
+				t.Errorf("pluralizeName(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSingularizeName(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"widgets", "widget"},
+		{"network_vlans", "network_vlan"},
+		{"linux_vm_instances", "linux_vm_instance"},
+		{"entries", "entry"},
+		// common IT path words
+		{"proxies", "proxy"},
+		{"policies", "policy"},
+		{"registries", "registry"},
+		{"caches", "cache"},
+		{"queues", "queue"},
+		{"statuses", "status"},
+		{"addresses", "address"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			if got := singularizeName(tt.in); got != tt.want {
+				t.Errorf("singularizeName(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
 // --- findCommonPathPrefix ------------------------------------------------------------------------
 
 func TestFindCommonPathPrefix(t *testing.T) {

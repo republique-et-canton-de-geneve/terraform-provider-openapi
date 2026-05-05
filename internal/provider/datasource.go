@@ -32,7 +32,7 @@ func (self *DynamicDataSource) Metadata(
 	req datasource.MetadataRequest,
 	resp *datasource.MetadataResponse,
 ) {
-	resp.TypeName = self.prefix + "_" + self.spec.Name
+	resp.TypeName = self.prefix + "_" + self.spec.PluralName
 }
 
 // Schema returns a single computed "items" list containing one object per API item.
@@ -76,15 +76,15 @@ func (self *DynamicDataSource) Read(
 			"No Collection Endpoint",
 			fmt.Sprintf(
 				"Resource %q has no list path and cannot be used as a data source.",
-				self.spec.Name))
+				self.spec.PluralName))
 		return
 	}
 
 	raw, err := self.client.List(ctx, self.spec.ListPath)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Unable to list "+self.spec.Name,
-			fmt.Sprintf("Unable to list %s, got error: %s", self.spec.Name, err))
+			"Unable to list "+self.spec.PluralName,
+			fmt.Sprintf("Unable to list %s, got error: %s", self.spec.PluralName, err))
 		return
 	}
 

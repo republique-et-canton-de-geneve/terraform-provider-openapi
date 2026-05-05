@@ -33,7 +33,7 @@ func (self *DynamicResource) Metadata(
 	req resource.MetadataRequest,
 	resp *resource.MetadataResponse,
 ) {
-	resp.TypeName = self.prefix + "_" + self.spec.Name
+	resp.TypeName = self.prefix + "_" + self.spec.SingularName
 }
 
 // Schema returns the Terraform schema built from the OAS3 item schema at startup.
@@ -90,12 +90,12 @@ func (self *DynamicResource) Create(
 	raw, err := self.client.Create(ctx, self.spec.ListPath, body)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Unable to create "+self.spec.Name,
-			fmt.Sprintf("Unable to create %s, got error: %s", self.spec.Name, err))
+			"Unable to create "+self.spec.SingularName,
+			fmt.Sprintf("Unable to create %s, got error: %s", self.spec.SingularName, err))
 		return
 	}
 
-	tflog.Debug(ctx, fmt.Sprintf("Created %s successfully", self.spec.Name),
+	tflog.Debug(ctx, fmt.Sprintf("Created %s successfully", self.spec.SingularName),
 		map[string]any{"id": raw[self.spec.IDField]})
 
 	// Save created resource into Terraform state.
@@ -121,15 +121,15 @@ func (self *DynamicResource) Read(
 	if id == "" {
 		resp.Diagnostics.AddError(
 			"Missing ID",
-			fmt.Sprintf("Unable to read %s, id is empty", self.spec.Name))
+			fmt.Sprintf("Unable to read %s, id is empty", self.spec.SingularName))
 		return
 	}
 
 	raw, found, err := self.client.Read(ctx, self.spec.ResolvedItemPath(id))
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Unable to read "+self.spec.Name,
-			fmt.Sprintf("Unable to read %s %s, got error: %s", self.spec.Name, id, err))
+			"Unable to read "+self.spec.SingularName,
+			fmt.Sprintf("Unable to read %s %s, got error: %s", self.spec.SingularName, id, err))
 		return
 	}
 	if !found {
@@ -166,7 +166,7 @@ func (self *DynamicResource) Update(
 	if id == "" {
 		resp.Diagnostics.AddError(
 			"Missing ID",
-			fmt.Sprintf("Unable to update %s, id is empty", self.spec.Name))
+			fmt.Sprintf("Unable to update %s, id is empty", self.spec.SingularName))
 		return
 	}
 
@@ -186,12 +186,12 @@ func (self *DynamicResource) Update(
 	raw, err := self.client.Update(ctx, self.spec.ResolvedItemPath(id), method, body)
 	if err != nil {
 		resp.Diagnostics.AddError(
-			"Unable to update "+self.spec.Name,
-			fmt.Sprintf("Unable to update %s %s, got error: %s", self.spec.Name, id, err))
+			"Unable to update "+self.spec.SingularName,
+			fmt.Sprintf("Unable to update %s %s, got error: %s", self.spec.SingularName, id, err))
 		return
 	}
 
-	tflog.Debug(ctx, fmt.Sprintf("Updated %s %s successfully", self.spec.Name, id))
+	tflog.Debug(ctx, fmt.Sprintf("Updated %s %s successfully", self.spec.SingularName, id))
 
 	// Save updated resource into Terraform state.
 	newState, diags := jsonToObject(raw, self.spec.Fields, self.attrTypes)
@@ -216,14 +216,14 @@ func (self *DynamicResource) Delete(
 	if id == "" {
 		resp.Diagnostics.AddError(
 			"Missing ID",
-			fmt.Sprintf("Unable to delete %s, id is empty", self.spec.Name))
+			fmt.Sprintf("Unable to delete %s, id is empty", self.spec.SingularName))
 		return
 	}
 
 	if err := self.client.Delete(ctx, self.spec.ResolvedItemPath(id)); err != nil {
 		resp.Diagnostics.AddError(
-			"Unable to delete "+self.spec.Name,
-			fmt.Sprintf("Unable to delete %s %s, got error: %s", self.spec.Name, id, err))
+			"Unable to delete "+self.spec.SingularName,
+			fmt.Sprintf("Unable to delete %s %s, got error: %s", self.spec.SingularName, id, err))
 	}
 }
 

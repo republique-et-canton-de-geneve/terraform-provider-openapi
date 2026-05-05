@@ -5,7 +5,9 @@ go 1.25.0
 require (
 	github.com/go-resty/resty/v2 v2.17.2
 	github.com/hashicorp/terraform-plugin-framework v1.18.0
+	github.com/hashicorp/terraform-plugin-framework-validators v0.19.0
 	github.com/hashicorp/terraform-plugin-log v0.10.0
+	github.com/jinzhu/inflection v1.0.0
 	github.com/pb33f/libopenapi v0.36.3
 )
 

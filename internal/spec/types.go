@@ -29,6 +29,15 @@ type FieldSpec struct {
 
 	Description string
 
+	// Validation
+
+	MaxLength *int64
+	MinLength *int64
+	Pattern   string
+	Minimum   *float64
+	Maximum   *float64
+	Enum      []string
+
 	// Nested
 
 	Nested   []*FieldSpec // for type == "object"
@@ -40,8 +49,9 @@ type ResourceSpec struct {
 
 	// Identity
 
-	Name    string
-	IDField string // name of the ID field, default "id"
+	SingularName string // used for resource type names, e.g. "linux_vm_instance"
+	PluralName   string // used for data source type names e.g. "linux_vm_instances"
+	IDField      string // name of the ID field, default "id"
 
 	// Paths
 

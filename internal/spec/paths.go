@@ -3,9 +3,16 @@ package spec
 import (
 	"regexp"
 	"strings"
+
+	"github.com/jinzhu/inflection"
 )
 
 var pathParamRE = regexp.MustCompile(`\{([^}]+)\}`)
+
+func init() {
+	// "cache/caches" is mishandled by the default rules (strips "es" -> "cach").
+	inflection.AddIrregular("cache", "caches")
+}
 
 // normalizePath ensures a path ends with a trailing slash.
 func normalizePath(p string) string {
@@ -32,6 +39,24 @@ func splitResourcePath(path, prefix string) (string, bool) {
 		parts = append(parts, strings.ReplaceAll(p, "-", "_"))
 	}
 	return strings.Join(parts, "_"), hasID
+}
+
+// singularizeName singularizes the last word of an underscore-joined resource name.
+// URL path segments are assumed to follow English REST naming conventions.
+// For example "linux_vm_instances" -> "linux_vm_instance", "network_vlans" -> "network_vlan".
+func singularizeName(name string) string {
+	parts := strings.Split(name, "_")
+	parts[len(parts)-1] = inflection.Singular(parts[len(parts)-1])
+	return strings.Join(parts, "_")
+}
+
+// pluralizeName pluralizes the last word of an underscore-joined resource name.
+// URL path segments are assumed to follow English REST naming conventions.
+// For example "linux_vm_instance" -> "linux_vm_instances", "network_vlan" -> "network_vlans".
+func pluralizeName(name string) string {
+	parts := strings.Split(name, "_")
+	parts[len(parts)-1] = inflection.Plural(parts[len(parts)-1])
+	return strings.Join(parts, "_")
 }
 
 // findCommonPathPrefix returns the longest slash-delimited prefix shared by all paths,
