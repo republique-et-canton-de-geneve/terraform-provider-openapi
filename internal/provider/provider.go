@@ -186,6 +186,7 @@ func (self *OpenAPIProvider) Resources(ctx context.Context) []func() resource.Re
 		schemaCopy := tfSchema
 		typesCopy := attrTypes
 		prefix := self.prefix
+		tflog.Debug(ctx, "registered resource", map[string]any{"type": prefix + "_" + s.SingularName})
 		factories = append(factories, func() resource.Resource {
 			return &DynamicResource{
 				spec:      specCopy,
@@ -198,17 +199,24 @@ func (self *OpenAPIProvider) Resources(ctx context.Context) []func() resource.Re
 	return factories
 }
 
-// DataSources returns one data source factory per discovered spec that has a list path.
+// DataSources returns one data source factory per discovered spec that has a list path,
+// plus the built-in manifest data source.
 func (self *OpenAPIProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
-	factories := make([]func() datasource.DataSource, 0, len(self.specs))
-	for _, s := range self.specs {
+	specs := self.specs
+	prefix := self.prefix
+	factories := make([]func() datasource.DataSource, 0, len(specs)+1)
+	factories = append(factories, func() datasource.DataSource {
+		return &ManifestDataSource{specs: specs, prefix: prefix}
+	})
+	tflog.Debug(ctx, "registered data source", map[string]any{"type": prefix + "_manifest"})
+	for _, s := range specs {
 		if s.ListPath == "" {
 			continue
 		}
 		_, attrTypes := buildSchema(s.Fields)
 		specCopy := s
 		typesCopy := attrTypes
-		prefix := self.prefix
+		tflog.Debug(ctx, "registered data source", map[string]any{"type": prefix + "_" + s.PluralName})
 		factories = append(factories, func() datasource.DataSource {
 			return &DynamicDataSource{
 				spec:      specCopy,

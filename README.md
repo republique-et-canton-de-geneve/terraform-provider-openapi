@@ -98,6 +98,12 @@ Multi-segment paths follow the same rule on the last segment only:
 `data "openapi_linux_vm_instances"`. Hyphens in path segments are replaced with underscores.
 
 
+## Discoverability
+
+The built-in `<prefix>_manifest` data source and `TF_LOG=DEBUG` let you inspect all discovered
+types at runtime. Please see [docs/discoverability.md][discoverability].
+
+
 ## Field mapping
 
 | OAS3 property | Terraform behaviour |
@@ -310,10 +316,11 @@ Restart it (Ctrl-C, then `go run . -debug` again) whenever you rebuild after a c
 
 Use `TF_LOG=DEBUG` to see structured API call logs from the provider.
 
-[validators]: docs/validators.md
+[discoverability]: docs/discoverability.md
 [extensions]: docs/architecture/extensions/index.md
+[go-install]: https://golang.org/doc/install
 [registry]: https://registry.terraform.io/providers/republique-et-canton-de-geneve/openapi/latest
-[tpf]: https://github.com/hashicorp/terraform-plugin-framework
 [sdk]: https://developer.hashicorp.com/terraform/plugin/framework-benefits
 [terraform-downloads]: https://developer.hashicorp.com/terraform/downloads
-[go-install]: https://golang.org/doc/install
+[tpf]: https://github.com/hashicorp/terraform-plugin-framework
+[validators]: docs/validators.md
