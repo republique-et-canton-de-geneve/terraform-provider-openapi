@@ -269,10 +269,10 @@ func TestFieldToSchemaAttr_number(t *testing.T) {
 
 func TestFieldToSchemaAttr_number_immutable(t *testing.T) {
 	f := &spec.FieldSpec{
-		Name: "ratio",
-		Type: "number",
-		Writable: true,
-		Required: true,
+		Name:      "ratio",
+		Type:      "number",
+		Writable:  true,
+		Required:  true,
 		Immutable: true,
 	}
 	got := fieldToSchemaAttr(f)
