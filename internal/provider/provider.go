@@ -101,7 +101,7 @@ func (self *OpenAPIProvider) Schema(
 	}
 }
 
-// Configure reads the provider HCL config and environment variables, then creates the shared Client.
+// Configure reads the provider HCL config and env. variables, then creates the shared Client.
 func (self *OpenAPIProvider) Configure(
 	ctx context.Context,
 	req provider.ConfigureRequest,
@@ -180,7 +180,10 @@ func (self *OpenAPIProvider) Resources(ctx context.Context) []func() resource.Re
 		schemaCopy := tfSchema
 		typesCopy := attrTypes
 		prefix := self.prefix
-		tflog.Debug(ctx, "registered resource", map[string]any{"type": prefix + "_" + s.SingularName})
+		tflog.Debug(
+			ctx,
+			"registered resource",
+			map[string]any{"type": prefix + "_" + s.SingularName})
 		factories = append(factories, func() resource.Resource {
 			return &DynamicResource{
 				spec:      specCopy,
@@ -207,10 +210,13 @@ func (self *OpenAPIProvider) DataSources(ctx context.Context) []func() datasourc
 		if s.ListPath == "" {
 			continue
 		}
-		_, attrTypes := buildSchema(s.Fields)
+		attrTypes := buildDataSourceAttrTypes(s.Fields)
 		specCopy := s
 		typesCopy := attrTypes
-		tflog.Debug(ctx, "registered data source", map[string]any{"type": prefix + "_" + s.PluralName})
+		tflog.Debug(
+			ctx,
+			"registered data source",
+			map[string]any{"type": prefix + "_" + s.PluralName})
 		factories = append(factories, func() datasource.DataSource {
 			return &DynamicDataSource{
 				spec:      specCopy,

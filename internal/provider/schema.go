@@ -65,7 +65,7 @@ func fieldToDSAttr(f *spec.FieldSpec) dsschema.Attribute {
 		}
 		elemType := attr.Type(types.StringType)
 		if f.ItemSpec != nil {
-			elemType = fieldToAttrType(f.ItemSpec)
+			elemType = fieldToDataSourceAttrType(f.ItemSpec)
 		}
 		return dsschema.ListAttribute{Computed: true, ElementType: elemType}
 	default:
@@ -80,17 +80,24 @@ func buildSchema(fields []*spec.FieldSpec) (schema.Schema, map[string]attr.Type)
 	attrTypes := make(map[string]attr.Type, len(fields))
 	for _, f := range fields {
 		attributes[f.Name] = fieldToSchemaAttr(f)
-		attrTypes[f.Name] = fieldToAttrType(f)
+		attrTypes[f.Name] = fieldToResourceAttrType(f)
 	}
 	return schema.Schema{Attributes: attributes}, attrTypes
 }
 
-// fieldToAttrType returns the attr.Type used for state encoding of a field.
-func fieldToAttrType(f *spec.FieldSpec) attr.Type {
-	// ID fields are always strings regardless of the API type (terraform import requires this).
+// fieldToResourceAttrType returns the attr.Type used for resource state encoding.
+// ID fields are coerced to StringType so that terraform import works regardless of the API type.
+func fieldToResourceAttrType(f *spec.FieldSpec) attr.Type {
 	if f.IsID {
 		return types.StringType
 	}
+	return fieldToDataSourceAttrType(f)
+}
+
+// fieldToDataSourceAttrType returns the attr.Type used for data source state encoding.
+// Unlike fieldToResourceAttrType it does not override ID fields, because data sources do not
+// support terraform import and must match the API's actual type.
+func fieldToDataSourceAttrType(f *spec.FieldSpec) attr.Type {
 	switch f.Type {
 	case "integer":
 		return types.Int64Type
@@ -101,17 +108,27 @@ func fieldToAttrType(f *spec.FieldSpec) attr.Type {
 	case "object":
 		nested := make(map[string]attr.Type, len(f.Nested))
 		for _, nf := range f.Nested {
-			nested[nf.Name] = fieldToAttrType(nf)
+			nested[nf.Name] = fieldToDataSourceAttrType(nf)
 		}
 		return types.ObjectType{AttrTypes: nested}
 	case "array":
 		if f.ItemSpec != nil {
-			return types.ListType{ElemType: fieldToAttrType(f.ItemSpec)}
+			return types.ListType{ElemType: fieldToDataSourceAttrType(f.ItemSpec)}
 		}
 		return types.ListType{ElemType: types.StringType}
 	default:
 		return types.StringType
 	}
+}
+
+// buildDataSourceAttrTypes builds the attrTypes map for a data source using
+// fieldToDataSourceAttrType so that ID fields keep their natural API type.
+func buildDataSourceAttrTypes(fields []*spec.FieldSpec) map[string]attr.Type {
+	m := make(map[string]attr.Type, len(fields))
+	for _, f := range fields {
+		m[f.Name] = fieldToDataSourceAttrType(f)
+	}
+	return m
 }
 
 // stringValidators builds string validators from a FieldSpec's constraints.
@@ -239,7 +256,7 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		}
 		elemType := attr.Type(types.StringType)
 		if f.ItemSpec != nil {
-			elemType = fieldToAttrType(f.ItemSpec)
+			elemType = fieldToResourceAttrType(f.ItemSpec)
 		}
 		return schema.ListAttribute{
 			MarkdownDescription: f.Description,

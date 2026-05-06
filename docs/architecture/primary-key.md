@@ -70,6 +70,18 @@ Composite keys are more common in:
   where `key` is the variable name and changing it creates a new variable).
 
 
+## ID field type: string in resources, API's native type in data sources
+
+Terraform requires the ID of a managed resource to be a string. This is because `terraform import`
+passes the ID as a command-line argument (always a string), and the framework stores it in state as
+`tftypes.String`. For this reason this provider always maps the ID field to `StringType` in resource
+schemas, regardless of the API's declared type (integer, UUID, etc.).
+
+The value is converted transparently when reading from or writing to the API.
+
+Unlike resources, data sources do not support `terraform import` and no such conversion is needed.
+
+
 ## Open questions
 
 The implementation of `x-primary-key` is not yet scheduled. See

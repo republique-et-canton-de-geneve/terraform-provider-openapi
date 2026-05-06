@@ -9,7 +9,7 @@ import (
 	"github.com/republique-et-canton-de-geneve/terraform-provider-openapi/internal/spec"
 )
 
-// --- fieldToAttrType -----------------------------------------------------------------------------
+// --- fieldToResourceAttrType ---------------------------------------------------------------------
 
 func TestFieldToAttrType_primitives(t *testing.T) {
 	cases := []struct {
@@ -24,7 +24,7 @@ func TestFieldToAttrType_primitives(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.typ, func(t *testing.T) {
-			got := fieldToAttrType(&spec.FieldSpec{Name: "f", Type: c.typ})
+			got := fieldToResourceAttrType(&spec.FieldSpec{Name: "f", Type: c.typ})
 			if got != c.want {
 				t.Fatalf("type %q: got %v, want %v", c.typ, got, c.want)
 			}
@@ -34,7 +34,7 @@ func TestFieldToAttrType_primitives(t *testing.T) {
 
 func TestFieldToAttrType_id_always_string(t *testing.T) {
 	// Even an integer ID field must map to StringType for terraform import.
-	got := fieldToAttrType(&spec.FieldSpec{Name: "id", Type: "integer", IsID: true})
+	got := fieldToResourceAttrType(&spec.FieldSpec{Name: "id", Type: "integer", IsID: true})
 	if got != types.StringType {
 		t.Fatalf("got %v, want StringType", got)
 	}
@@ -46,7 +46,7 @@ func TestFieldToAttrType_object(t *testing.T) {
 		Type:   "object",
 		Nested: []*spec.FieldSpec{{Name: "key", Type: "string"}},
 	}
-	got := fieldToAttrType(f)
+	got := fieldToResourceAttrType(f)
 	objType, ok := got.(types.ObjectType)
 	if !ok {
 		t.Fatalf("expected ObjectType, got %T", got)
@@ -62,7 +62,7 @@ func TestFieldToAttrType_array_with_itemspec(t *testing.T) {
 		Type:     "array",
 		ItemSpec: &spec.FieldSpec{Name: "", Type: "string"},
 	}
-	got := fieldToAttrType(f)
+	got := fieldToResourceAttrType(f)
 	listType, ok := got.(types.ListType)
 	if !ok {
 		t.Fatalf("expected ListType, got %T", got)
@@ -74,13 +74,74 @@ func TestFieldToAttrType_array_with_itemspec(t *testing.T) {
 
 func TestFieldToAttrType_array_no_itemspec(t *testing.T) {
 	f := &spec.FieldSpec{Name: "tags", Type: "array"}
-	got := fieldToAttrType(f)
+	got := fieldToResourceAttrType(f)
 	listType, ok := got.(types.ListType)
 	if !ok {
 		t.Fatalf("expected ListType, got %T", got)
 	}
 	if listType.ElemType != types.StringType {
 		t.Fatalf("default elem type should be StringType, got %v", listType.ElemType)
+	}
+}
+
+// --- fieldToDataSourceAttrType -------------------------------------------------------------------
+
+func TestFieldToDataSourceAttrType_id_keeps_natural_type(t *testing.T) {
+	// Data sources do not support terraform import, so the ID field must keep its API type.
+	got := fieldToDataSourceAttrType(&spec.FieldSpec{Name: "id", Type: "integer", IsID: true})
+	if got != types.Int64Type {
+		t.Fatalf("got %v, want Int64Type", got)
+	}
+}
+
+func TestFieldToDataSourceAttrType_primitives(t *testing.T) {
+	cases := []struct {
+		typ  string
+		want any
+	}{
+		{"string", types.StringType},
+		{"integer", types.Int64Type},
+		{"number", types.Float64Type},
+		{"boolean", types.BoolType},
+		{"unknown", types.StringType},
+	}
+	for _, c := range cases {
+		t.Run(c.typ, func(t *testing.T) {
+			got := fieldToDataSourceAttrType(&spec.FieldSpec{Name: "f", Type: c.typ})
+			if got != c.want {
+				t.Fatalf("type %q: got %v, want %v", c.typ, got, c.want)
+			}
+		})
+	}
+}
+
+func TestFieldToDataSourceAttrType_array_with_integer_id_item(t *testing.T) {
+	f := &spec.FieldSpec{
+		Name:     "items",
+		Type:     "array",
+		ItemSpec: &spec.FieldSpec{Name: "id", Type: "integer", IsID: true},
+	}
+	got := fieldToDataSourceAttrType(f)
+	listType, ok := got.(types.ListType)
+	if !ok {
+		t.Fatalf("expected ListType, got %T", got)
+	}
+	if listType.ElemType != types.Int64Type {
+		t.Fatalf("elem type: got %v, want Int64Type", listType.ElemType)
+	}
+}
+
+func TestBuildDataSourceAttrTypes_id_is_int64(t *testing.T) {
+	fields := []*spec.FieldSpec{
+		{Name: "id", Type: "integer", IsID: true},
+		{Name: "name", Type: "string"},
+	}
+	m := buildDataSourceAttrTypes(fields)
+	if m["id"] != types.Int64Type {
+		t.Fatalf("id: got %v, want Int64Type", m["id"])
+	}
+	if m["name"] != types.StringType {
+		t.Fatalf("name: got %v, want StringType", m["name"])
 	}
 }
 
@@ -207,7 +268,13 @@ func TestFieldToSchemaAttr_number(t *testing.T) {
 }
 
 func TestFieldToSchemaAttr_number_immutable(t *testing.T) {
-	f := &spec.FieldSpec{Name: "ratio", Type: "number", Writable: true, Required: true, Immutable: true}
+	f := &spec.FieldSpec{
+		Name: "ratio",
+		Type: "number",
+		Writable: true,
+		Required: true,
+		Immutable: true,
+	}
 	got := fieldToSchemaAttr(f)
 	attr, ok := got.(schema.Float64Attribute)
 	if !ok {
@@ -220,14 +287,22 @@ func TestFieldToSchemaAttr_number_immutable(t *testing.T) {
 
 func TestFieldToSchemaAttr_immutable_computed_string(t *testing.T) {
 	// x-immutable + server-computed: both UseNonNullStateForUnknown and RequiresReplace.
-	f := &spec.FieldSpec{Name: "region", Type: "string", Writable: true, Computed: true, Immutable: true}
+	f := &spec.FieldSpec{
+		Name:      "region",
+		Type:      "string",
+		Writable:  true,
+		Computed:  true,
+		Immutable: true,
+	}
 	got := fieldToSchemaAttr(f)
 	attr, ok := got.(schema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
 	}
 	if len(attr.PlanModifiers) != 2 {
-		t.Fatalf("immutable computed field must have 2 plan modifiers, got %d", len(attr.PlanModifiers))
+		t.Fatalf(
+			"immutable computed field must have 2 plan modifiers, got %d",
+			len(attr.PlanModifiers))
 	}
 }
 
