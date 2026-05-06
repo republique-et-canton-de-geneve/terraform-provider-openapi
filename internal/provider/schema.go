@@ -9,10 +9,15 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	dsschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -175,7 +180,9 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		}
 	}
 
-	computed := f.Computed || !f.Writable
+	// A writable field with a default implies Computed so the framework accepts the Default.
+	hasDefault := f.Default != nil && f.Writable
+	computed := f.Computed || !f.Writable || hasDefault
 	optional := f.Writable && (!f.Required || computed)
 	required := f.Required && f.Writable && !computed
 
@@ -188,7 +195,7 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		if f.Immutable {
 			planMods = append(planMods, int64planmodifier.RequiresReplace())
 		}
-		return schema.Int64Attribute{
+		a := schema.Int64Attribute{
 			MarkdownDescription: f.Description,
 			Required:            required,
 			Optional:            optional,
@@ -196,6 +203,12 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 			PlanModifiers:       planMods,
 			Validators:          int64Validators(f),
 		}
+		if hasDefault {
+			if v, ok := f.Default.(int64); ok {
+				a.Default = int64default.StaticInt64(v)
+			}
+		}
+		return a
 	case "number":
 		planMods := []planmodifier.Float64{}
 		if computed {
@@ -204,13 +217,19 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		if f.Immutable {
 			planMods = append(planMods, float64planmodifier.RequiresReplace())
 		}
-		return schema.Float64Attribute{
+		a := schema.Float64Attribute{
 			MarkdownDescription: f.Description,
 			Required:            required,
 			Optional:            optional,
 			Computed:            computed,
 			PlanModifiers:       planMods,
 		}
+		if hasDefault {
+			if v, ok := f.Default.(float64); ok {
+				a.Default = float64default.StaticFloat64(v)
+			}
+		}
+		return a
 	case "boolean":
 		planMods := []planmodifier.Bool{}
 		if computed {
@@ -219,13 +238,19 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		if f.Immutable {
 			planMods = append(planMods, boolplanmodifier.RequiresReplace())
 		}
-		return schema.BoolAttribute{
+		a := schema.BoolAttribute{
 			MarkdownDescription: f.Description,
 			Required:            required,
 			Optional:            optional,
 			Computed:            computed,
 			PlanModifiers:       planMods,
 		}
+		if hasDefault {
+			if v, ok := f.Default.(bool); ok {
+				a.Default = booldefault.StaticBool(v)
+			}
+		}
+		return a
 	case "object":
 		nestedAttrs := make(map[string]schema.Attribute, len(f.Nested))
 		for _, nf := range f.Nested {
@@ -258,13 +283,19 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		if f.ItemSpec != nil {
 			elemType = fieldToResourceAttrType(f.ItemSpec)
 		}
-		return schema.ListAttribute{
+		a := schema.ListAttribute{
 			MarkdownDescription: f.Description,
 			Required:            required,
 			Optional:            optional,
 			Computed:            computed,
 			ElementType:         elemType,
 		}
+		if hasDefault {
+			if _, ok := f.Default.([]any); ok {
+				a.Default = listdefault.StaticValue(types.ListValueMust(elemType, []attr.Value{}))
+			}
+		}
+		return a
 	default: // string + fallback
 		planMods := []planmodifier.String{}
 		if computed {
@@ -273,7 +304,7 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		if f.Immutable {
 			planMods = append(planMods, stringplanmodifier.RequiresReplace())
 		}
-		return schema.StringAttribute{
+		a := schema.StringAttribute{
 			MarkdownDescription: f.Description,
 			Required:            required,
 			Optional:            optional,
@@ -282,5 +313,11 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 			PlanModifiers:       planMods,
 			Validators:          stringValidators(f),
 		}
+		if hasDefault {
+			if v, ok := f.Default.(string); ok {
+				a.Default = stringdefault.StaticString(v)
+			}
+		}
+		return a
 	}
 }

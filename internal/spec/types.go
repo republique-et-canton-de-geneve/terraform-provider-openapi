@@ -29,6 +29,10 @@ type FieldSpec struct {
 
 	Description string
 
+	// Miscellaneous
+
+	Default any // string, int64, float64, bool, or []any (empty array); nil if absent
+
 	// Validation
 
 	MaxLength *int64

@@ -15,6 +15,9 @@ components:
     Immutable:
       type: string
       x-immutable: true
+    XComputed:
+      type: string
+      x-computed: true
     Sensitive:
       type: string
       x-sensitive: true
@@ -108,4 +111,27 @@ components:
       oneOf:
       - $ref: '#/components/schemas/OneOfEnumA'
       - $ref: '#/components/schemas/OneOfEnumB'
+    DefaultString:
+      type: string
+      default: hello
+    DefaultInteger:
+      type: integer
+      default: 42
+    DefaultNumber:
+      type: number
+      default: 3.14
+    DefaultBoolTrue:
+      type: boolean
+      default: true
+    DefaultBoolFalse:
+      type: boolean
+      default: false
+    DefaultEmptyArray:
+      type: array
+      items:
+        type: string
+      default: []
+    DefaultNull:
+      type: string
+      default: null
 ...

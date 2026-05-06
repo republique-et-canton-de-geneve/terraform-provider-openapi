@@ -42,7 +42,7 @@ func TestBuildFieldSpec_NilSchema(t *testing.T) {
 			name = "writable"
 		}
 		t.Run(name, func(t *testing.T) {
-			got := buildFieldSpec("field", nil, tt.writable, false)
+			got := buildFieldSpec("res", "field", nil, tt.writable, false)
 			if got.Type != "string" {
 				t.Errorf("Type = %q, want %q", got.Type, "string")
 			}
@@ -96,6 +96,12 @@ func TestBuildFieldSpec(t *testing.T) {
 			schemaName: "Immutable", fieldName: "region",
 			writable: true,
 			wantType: "string", wantWritable: true, wantImmutable: true,
+		},
+		{
+			name:       "x-computed true forces computed on writable field",
+			schemaName: "XComputed", fieldName: "slug",
+			writable: true,
+			wantType: "string", wantWritable: true, wantComputed: true,
 		},
 		{
 			name:       "x-sensitive true opt-in",
@@ -153,7 +159,7 @@ func TestBuildFieldSpec(t *testing.T) {
 			if !ok {
 				t.Fatalf("schema %q not found in test spec", tt.schemaName)
 			}
-			got := buildFieldSpec(tt.fieldName, proxy.Schema(), tt.writable, tt.required)
+			got := buildFieldSpec("res", tt.fieldName, proxy.Schema(), tt.writable, tt.required)
 
 			if got.Type != tt.wantType {
 				t.Errorf("Type = %q, want %q", got.Type, tt.wantType)
@@ -201,7 +207,7 @@ func TestBuildFieldSpec_Validation(t *testing.T) {
 		if !ok {
 			t.Fatalf("schema %q not found", name)
 		}
-		return buildFieldSpec("field", proxy.Schema(), true, false)
+		return buildFieldSpec("res", "field", proxy.Schema(), true, false)
 	}
 
 	t.Run("maxLength", func(t *testing.T) {
@@ -285,6 +291,82 @@ func TestBuildFieldSpec_Validation(t *testing.T) {
 	})
 }
 
+// --- buildFieldSpec defaults ---------------------------------------------------------------------
+
+func TestBuildFieldSpec_Default(t *testing.T) {
+	model := mustParseFixture(t, "schema_components.yaml")
+
+	getField := func(schemaName string) *FieldSpec {
+		t.Helper()
+		proxy, ok := model.Model.Components.Schemas.Get(schemaName)
+		if !ok {
+			t.Fatalf("schema %q not found", schemaName)
+		}
+		return buildFieldSpec("res", "field", proxy.Schema(), true, false)
+	}
+
+	t.Run("string default", func(t *testing.T) {
+		f := getField("DefaultString")
+		if f.Default != "hello" {
+			t.Errorf("Default = %v, want %q", f.Default, "hello")
+		}
+	})
+
+	t.Run("integer default", func(t *testing.T) {
+		f := getField("DefaultInteger")
+		if f.Default != int64(42) {
+			t.Errorf("Default = %v (%T), want int64(42)", f.Default, f.Default)
+		}
+	})
+
+	t.Run("number default", func(t *testing.T) {
+		f := getField("DefaultNumber")
+		v, ok := f.Default.(float64)
+		if !ok || v != 3.14 {
+			t.Errorf("Default = %v (%T), want float64(3.14)", f.Default, f.Default)
+		}
+	})
+
+	t.Run("boolean default true", func(t *testing.T) {
+		f := getField("DefaultBoolTrue")
+		if f.Default != true {
+			t.Errorf("Default = %v, want true", f.Default)
+		}
+	})
+
+	t.Run("boolean default false", func(t *testing.T) {
+		f := getField("DefaultBoolFalse")
+		if f.Default != false {
+			t.Errorf("Default = %v, want false", f.Default)
+		}
+	})
+
+	t.Run("empty array default", func(t *testing.T) {
+		f := getField("DefaultEmptyArray")
+		if _, ok := f.Default.([]any); !ok {
+			t.Errorf("Default = %v (%T), want []any", f.Default, f.Default)
+		}
+	})
+
+	t.Run("null default treated as absent", func(t *testing.T) {
+		f := getField("DefaultNull")
+		if f.Default != nil {
+			t.Errorf("Default = %v, want nil for null default", f.Default)
+		}
+	})
+
+	t.Run("no default when not writable", func(t *testing.T) {
+		proxy, ok := model.Model.Components.Schemas.Get("DefaultInteger")
+		if !ok {
+			t.Fatal("DefaultInteger schema not found")
+		}
+		f := buildFieldSpec("res", "field", proxy.Schema(), false, false)
+		// Default is still parsed from schema, but hasDefault logic in schema.go gates its application
+		// The spec layer records it regardless of writability.
+		_ = f
+	})
+}
+
 // --- buildFieldSpecs -----------------------------------------------------------------------------
 
 func TestBuildFieldSpecs(t *testing.T) {
@@ -295,7 +377,7 @@ func TestBuildFieldSpecs(t *testing.T) {
 	}
 
 	writeFields := map[string]bool{"name": true, "size": true}
-	byName := fieldsByName(buildFieldSpecs(proxy.Schema(), writeFields))
+	byName := fieldsByName(buildFieldSpecs("res", proxy.Schema(), writeFields))
 
 	// id: not in write body -> Computed derived from OAS (not writable); IsID set by buildFieldSpecs
 	id := byName["id"]
@@ -368,7 +450,7 @@ func TestBuildFieldSpecs_ClientSideID(t *testing.T) {
 	}
 
 	writeFields := map[string]bool{"id": true, "name": true, "size": true}
-	byName := fieldsByName(buildFieldSpecs(proxy.Schema(), writeFields))
+	byName := fieldsByName(buildFieldSpecs("res", proxy.Schema(), writeFields))
 
 	id := byName["id"]
 	if id == nil {

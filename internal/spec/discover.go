@@ -1,12 +1,14 @@
 package spec
 
 import (
+	"log"
 	"strings"
 	"unicode"
 
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3high "github.com/pb33f/libopenapi/datamodel/high/v3"
+	yaml "go.yaml.in/yaml/v4"
 )
 
 type pathInfo struct {
@@ -102,7 +104,7 @@ func buildResourceSpec(name string, listInfo, itemInfo *pathInfo) *ResourceSpec 
 	if listInfo != nil && listInfo.item.Post != nil {
 		writeFields = extractRequestBodyFields(listInfo.item.Post)
 	}
-	rs.Fields = buildFieldSpecs(itemSchema, writeFields)
+	rs.Fields = buildFieldSpecs(name, itemSchema, writeFields)
 
 	rs.IDField = "id"
 
@@ -152,7 +154,11 @@ func extractRequestBodyFields(op *v3high.Operation) map[string]bool {
 
 // buildFieldSpecs converts an OAS3 object schema into a slice of FieldSpecs,
 // marking fields absent from writeFields as computed.
-func buildFieldSpecs(schema *base.Schema, writeFields map[string]bool) []*FieldSpec {
+func buildFieldSpecs(
+	resourceName string,
+	schema *base.Schema,
+	writeFields map[string]bool,
+) []*FieldSpec {
 	if schema == nil || schema.Properties == nil {
 		return nil
 	}
@@ -165,7 +171,12 @@ func buildFieldSpecs(schema *base.Schema, writeFields map[string]bool) []*FieldS
 	var fields []*FieldSpec
 	for propName, propProxy := range schema.Properties.FromOldest() {
 		fields = append(fields,
-			buildFieldSpec(propName, propProxy.Schema(), writeFields[propName], requiredSet[propName]))
+			buildFieldSpec(
+				resourceName,
+				propName,
+				propProxy.Schema(),
+				writeFields[propName],
+				requiredSet[propName]))
 	}
 
 	for _, f := range fields {
@@ -204,7 +215,13 @@ func toSnakeCase(s string) string {
 }
 
 // buildFieldSpec converts a single OAS3 property schema into a FieldSpec.
-func buildFieldSpec(name string, schema *base.Schema, writable, required bool) *FieldSpec {
+func buildFieldSpec(
+	resourceName string,
+	name string,
+	schema *base.Schema,
+	writable bool,
+	required bool,
+) *FieldSpec {
 	f := &FieldSpec{OASName: name, Name: toSnakeCase(name)}
 
 	// Type
@@ -233,6 +250,18 @@ func buildFieldSpec(name string, schema *base.Schema, writable, required bool) *
 	if !f.Writable && !writable {
 		f.Computed = true
 	}
+	if schema.Extensions != nil {
+		if node, ok := schema.Extensions.Get("x-computed"); ok && node != nil {
+			if node.Value == "true" {
+				f.Computed = true
+			} else {
+				log.Printf(
+					"[WARN] resource %q field %q: x-computed: %q is not supported; "+
+						"only x-computed: true is recognised",
+					resourceName, name, node.Value)
+			}
+		}
+	}
 	f.Sensitive = isSensitiveField(name, schema)
 
 	// Metadata
@@ -255,6 +284,7 @@ func buildFieldSpec(name string, schema *base.Schema, writable, required bool) *
 		f.Maximum = schema.Maximum
 	}
 	f.Enum = extractEnumValues(schema)
+	f.Default = decodeDefaultNode(schema.Default, f.Type)
 
 	// Nested fields for objects
 	if f.Type == "object" && schema.Properties != nil {
@@ -264,16 +294,56 @@ func buildFieldSpec(name string, schema *base.Schema, writable, required bool) *
 		}
 		for propName, propProxy := range schema.Properties.FromOldest() {
 			f.Nested = append(f.Nested,
-				buildFieldSpec(propName, propProxy.Schema(), true, nestedRequired[propName]))
+				buildFieldSpec(
+					resourceName,
+					propName,
+					propProxy.Schema(),
+					true,
+					nestedRequired[propName]))
 		}
 	}
 
 	// Element type for arrays
 	if f.Type == "array" && schema.Items != nil && schema.Items.IsA() && schema.Items.A != nil {
-		f.ItemSpec = buildFieldSpec("item", schema.Items.A.Schema(), true, false)
+		f.ItemSpec = buildFieldSpec(resourceName, "item", schema.Items.A.Schema(), true, false)
 	}
 
 	return f
+}
+
+// decodeDefaultNode converts a yaml.Node (from OAS3 `default:`) into a typed Go value.
+// Returns nil for unsupported shapes (null, mappings, non-empty sequences).
+func decodeDefaultNode(node *yaml.Node, fieldType string) any {
+	if node == nil || node.Tag == "!!null" {
+		return nil
+	}
+	if node.Kind == yaml.SequenceNode {
+		if fieldType == "array" {
+			return []any{} // only empty-array defaults are supported
+		}
+		return nil
+	}
+	if node.Kind != yaml.ScalarNode {
+		return nil
+	}
+	switch fieldType {
+	case "integer":
+		var v int64
+		if node.Decode(&v) == nil {
+			return v
+		}
+	case "number":
+		var v float64
+		if node.Decode(&v) == nil {
+			return v
+		}
+	case "boolean":
+		var v bool
+		if node.Decode(&v) == nil {
+			return v
+		}
+	}
+	return node.Value
 }
 
 // extractEnumValues collects allowed string values from a schema's enum, allOf, or oneOf.

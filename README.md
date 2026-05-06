@@ -113,6 +113,8 @@ types at runtime. Please see [docs/discoverability.md][discoverability].
 | `readOnly: true` | `Computed: true`: server-managed, never sent in requests |
 | present in POST body | `Optional` / `Required` depending on OAS3 `required` |
 | absent from POST body | `Computed: true` |
+| `default:` | `Optional + Computed` with a static default; see [docs/defaults.md][defaults] |
+| `x-computed: "true"` | `Computed: true` on a writable field whose value is set by the server |
 | `x-immutable: "true"` | `RequiresReplace` plan modifier |
 | `x-sensitive: "true"` | Marked sensitive in Terraform state |
 | name contains `password`, `secret`, `token`, `api_key`, … | Auto-marked sensitive |
@@ -131,12 +133,12 @@ See [docs/validators.md][validators] for the full list and enum pattern details.
 
 | Extension | Scope | Description |
 |---|---|---|
+| `x-computed` | field | Writable field whose value is set by the server if omitted |
 | `x-immutable` | field | Field cannot be changed after creation (forces replace) |
 | `x-sensitive` | field | Field value is redacted in plan and state |
 
 See [docs/architecture/extensions/index.md][extensions] for full documentation, naming rationale,
-and the extensions planned on the roadmap (`x-computed`, `x-ignore-order`, `x-tf-exclude`,
-`x-tf-status`).
+and the extensions planned on the roadmap (`x-ignore-order`, `x-tf-exclude`, `x-tf-status`).
 
 
 ## Example
@@ -317,6 +319,7 @@ Restart it (Ctrl-C, then `go run . -debug` again) whenever you rebuild after a c
 
 Use `TF_LOG=DEBUG` to see structured API call logs from the provider.
 
+[defaults]: docs/defaults.md
 [discoverability]: docs/discoverability.md
 [extensions]: docs/architecture/extensions/index.md
 [go-install]: https://golang.org/doc/install

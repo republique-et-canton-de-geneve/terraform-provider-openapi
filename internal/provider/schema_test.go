@@ -508,6 +508,90 @@ func TestFieldToDSAttr_array_of_objects(t *testing.T) {
 	}
 }
 
+// --- fieldToSchemaAttr defaults ------------------------------------------------------------------
+
+func TestFieldToSchemaAttr_default_string(t *testing.T) {
+	f := &spec.FieldSpec{Name: "status", Type: "string", Writable: true, Default: "active"}
+	got := fieldToSchemaAttr(f)
+	attr, ok := got.(schema.StringAttribute)
+	if !ok {
+		t.Fatalf("expected StringAttribute, got %T", got)
+	}
+	if attr.Default == nil {
+		t.Fatal("expected Default to be set")
+	}
+	if !attr.Computed {
+		t.Fatal("field with default must be Computed")
+	}
+	if !attr.Optional {
+		t.Fatal("field with default must be Optional")
+	}
+}
+
+func TestFieldToSchemaAttr_default_integer(t *testing.T) {
+	f := &spec.FieldSpec{Name: "size", Type: "integer", Writable: true, Default: int64(30)}
+	got := fieldToSchemaAttr(f)
+	attr, ok := got.(schema.Int64Attribute)
+	if !ok {
+		t.Fatalf("expected Int64Attribute, got %T", got)
+	}
+	if attr.Default == nil {
+		t.Fatal("expected Default to be set")
+	}
+	if !attr.Computed || !attr.Optional {
+		t.Fatal("field with default must be Optional+Computed")
+	}
+}
+
+func TestFieldToSchemaAttr_default_boolean(t *testing.T) {
+	f := &spec.FieldSpec{Name: "enabled", Type: "boolean", Writable: true, Default: false}
+	got := fieldToSchemaAttr(f)
+	attr, ok := got.(schema.BoolAttribute)
+	if !ok {
+		t.Fatalf("expected BoolAttribute, got %T", got)
+	}
+	if attr.Default == nil {
+		t.Fatal("expected Default to be set")
+	}
+	if !attr.Computed || !attr.Optional {
+		t.Fatal("field with default must be Optional+Computed")
+	}
+}
+
+func TestFieldToSchemaAttr_default_empty_array(t *testing.T) {
+	f := &spec.FieldSpec{
+		Name:     "emails",
+		Type:     "array",
+		Writable: true,
+		Default:  []any{},
+		ItemSpec: &spec.FieldSpec{Name: "", Type: "string"},
+	}
+	got := fieldToSchemaAttr(f)
+	attr, ok := got.(schema.ListAttribute)
+	if !ok {
+		t.Fatalf("expected ListAttribute, got %T", got)
+	}
+	if attr.Default == nil {
+		t.Fatal("expected Default to be set")
+	}
+	if !attr.Computed || !attr.Optional {
+		t.Fatal("field with default must be Optional+Computed")
+	}
+}
+
+func TestFieldToSchemaAttr_default_not_applied_to_readonly(t *testing.T) {
+	// Default in spec on a non-writable field (e.g. readOnly) must not be applied to schema.
+	f := &spec.FieldSpec{Name: "created_at", Type: "string", Writable: false, Default: "now"}
+	got := fieldToSchemaAttr(f)
+	attr, ok := got.(schema.StringAttribute)
+	if !ok {
+		t.Fatalf("expected StringAttribute, got %T", got)
+	}
+	if attr.Default != nil {
+		t.Fatal("Default must not be set on non-writable (readonly) fields")
+	}
+}
+
 // --- buildSchema / buildDataSourceSchema ---------------------------------------------------------
 
 func TestBuildSchema_produces_correct_keys(t *testing.T) {
