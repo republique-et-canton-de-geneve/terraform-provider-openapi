@@ -137,6 +137,9 @@ func TestFieldToSchemaAttr_computed_readonly(t *testing.T) {
 		t.Fatalf("readonly: Computed=%v Required=%v Optional=%v",
 			attr.Computed, attr.Required, attr.Optional)
 	}
+	if len(attr.PlanModifiers) != 1 {
+		t.Fatal("computed field must have UseNonNullStateForUnknown plan modifier")
+	}
 }
 
 func TestFieldToSchemaAttr_immutable_string(t *testing.T) {
@@ -200,6 +203,31 @@ func TestFieldToSchemaAttr_number(t *testing.T) {
 	got := fieldToSchemaAttr(f)
 	if _, ok := got.(schema.Float64Attribute); !ok {
 		t.Fatalf("expected Float64Attribute, got %T", got)
+	}
+}
+
+func TestFieldToSchemaAttr_number_immutable(t *testing.T) {
+	f := &spec.FieldSpec{Name: "ratio", Type: "number", Writable: true, Required: true, Immutable: true}
+	got := fieldToSchemaAttr(f)
+	attr, ok := got.(schema.Float64Attribute)
+	if !ok {
+		t.Fatalf("expected Float64Attribute, got %T", got)
+	}
+	if len(attr.PlanModifiers) != 1 {
+		t.Fatal("immutable number must have RequiresReplace plan modifier")
+	}
+}
+
+func TestFieldToSchemaAttr_immutable_computed_string(t *testing.T) {
+	// x-immutable + server-computed: both UseNonNullStateForUnknown and RequiresReplace.
+	f := &spec.FieldSpec{Name: "region", Type: "string", Writable: true, Computed: true, Immutable: true}
+	got := fieldToSchemaAttr(f)
+	attr, ok := got.(schema.StringAttribute)
+	if !ok {
+		t.Fatalf("expected StringAttribute, got %T", got)
+	}
+	if len(attr.PlanModifiers) != 2 {
+		t.Fatalf("immutable computed field must have 2 plan modifiers, got %d", len(attr.PlanModifiers))
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	dsschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -164,6 +165,9 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 	switch f.Type {
 	case "integer":
 		planMods := []planmodifier.Int64{}
+		if computed {
+			planMods = append(planMods, int64planmodifier.UseNonNullStateForUnknown())
+		}
 		if f.Immutable {
 			planMods = append(planMods, int64planmodifier.RequiresReplace())
 		}
@@ -176,14 +180,25 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 			Validators:          int64Validators(f),
 		}
 	case "number":
+		planMods := []planmodifier.Float64{}
+		if computed {
+			planMods = append(planMods, float64planmodifier.UseNonNullStateForUnknown())
+		}
+		if f.Immutable {
+			planMods = append(planMods, float64planmodifier.RequiresReplace())
+		}
 		return schema.Float64Attribute{
 			MarkdownDescription: f.Description,
 			Required:            required,
 			Optional:            optional,
 			Computed:            computed,
+			PlanModifiers:       planMods,
 		}
 	case "boolean":
 		planMods := []planmodifier.Bool{}
+		if computed {
+			planMods = append(planMods, boolplanmodifier.UseNonNullStateForUnknown())
+		}
 		if f.Immutable {
 			planMods = append(planMods, boolplanmodifier.RequiresReplace())
 		}
@@ -235,6 +250,9 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		}
 	default: // string + fallback
 		planMods := []planmodifier.String{}
+		if computed {
+			planMods = append(planMods, stringplanmodifier.UseNonNullStateForUnknown())
+		}
 		if f.Immutable {
 			planMods = append(planMods, stringplanmodifier.RequiresReplace())
 		}
