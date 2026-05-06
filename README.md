@@ -40,7 +40,8 @@ evaluated but not used for three reasons:
 ## How it works
 
 At startup the provider reads the spec identified by `OPENAPI_SPEC` and walks all paths. Pairs of
-paths like `/vlans/` + `/vlans/{id}/` are grouped into a single resource named `openapi_vlans`.
+paths like `/vlans/` + `/vlans/{id}/` are grouped into a resource named `openapi_vlan` (resource) /
+`openapi_vlans` (data source).
 The GET `200` response schema drives the Terraform schema; the POST request body determines which
 fields are writable.
 
@@ -81,7 +82,7 @@ the configuration value is only used for validation.
 The provider groups OAS3 paths into resources using these rules:
 
 * A **collection path** (`/things/`) paired with an **item path** (`/things/{id}/`) becomes
-  resource `openapi_things`.
+  `resource "openapi_thing"` and `data "openapi_things"`.
 * Multi-segment paths (`/a/b/`) become `openapi_a_b`.
 * A common path prefix shared by all paths (e.g. `/api/v1/`) is stripped before naming.
 * Resources without a GET `/{id}/` 200 response are silently skipped (no readable schema).
@@ -171,7 +172,7 @@ paths:
 The provider exposes:
 
 ```hcl
-resource "openapi_vlans" "core" {
+resource "openapi_vlan" "core" {
   name    = "core-network"
   vlan_id = 100   # immutable: changing this forces replacement
 }
