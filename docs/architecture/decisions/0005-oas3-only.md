@@ -29,8 +29,8 @@ Support OAS3 only. Swagger 2 specs are not handled and will produce a parse erro
 ## Consequences
 
 * The parser targets OAS3 structures exclusively; no version detection or branching is needed.
-* Several extensions from dikhan's provider become unnecessary: `x-terraform-authentication-scheme-bearer`
-  exists only because OAS2 has no native Bearer scheme; OAS3's `http/bearer` security scheme
-  covers it natively.
+* Several extensions from dikhan's provider become unnecessary. For example,
+  `x-terraform-authentication-scheme-bearer` exists only because OAS2 has no native Bearer
+  scheme; OAS3's `http/bearer` security scheme covers it natively.
 * Consumers with OAS2 specs must migrate before using this provider. No compatibility shim will
   be added.

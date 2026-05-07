@@ -6,6 +6,7 @@ Constraints present in the spec are applied to the corresponding resource attrib
 
 Validations are available at plan time and help in guarding from misconfigurations.
 
+
 ## String constraints
 
 | OAS3 keyword | Terraform validator | Example |
@@ -15,12 +16,14 @@ Validations are available at plan time and help in guarding from misconfiguratio
 | `pattern` | `RegexMatches(re)` | `pattern: ^[0-9]{4,5}$` |
 | `enum` | `OneOf(values...)` | see [Enum patterns](#enum-patterns) |
 
+
 ## Integer constraints
 
 | OAS3 keyword | Terraform validator | Example |
 |---|---|---|
 | `minimum` | `AtLeast(n)` | `minimum: 0` |
 | `maximum` | `AtMost(n)` | `maximum: 4096` |
+
 
 ## Enum patterns
 
@@ -78,12 +81,14 @@ status:
 The provider merges all values from both schemas into a single `OneOf` validator, so `""` is
 accepted alongside the named values.
 
+
 ## Read-only fields
 
 Validators are extracted from the schema regardless of whether a field is read-only.
 
 Since Terraform does not validate computed values by design, it will not validate server-side
 generated data.
+
 
 ## Test fixture
 
