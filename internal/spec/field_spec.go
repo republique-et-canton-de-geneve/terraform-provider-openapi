@@ -108,6 +108,15 @@ func buildFieldSpec(
 		return f
 	}
 	f.Type = detectType(schema)
+
+	// Type: Defaults to dynamic type when its undefined and can't be inferred from other fields
+	if f.Type == "string" && len(schema.Type) == 0 &&
+		len(schema.Enum) == 0 &&
+		len(schema.AllOf) == 0 &&
+		len(schema.OneOf) == 0 &&
+		len(schema.AnyOf) == 0 {
+		f.Type = "dynamic"
+	}
 	f.Format = schema.Format
 
 	// Behaviour: Writable set first as Computed and Required derive from it
@@ -138,6 +147,11 @@ func buildFieldSpec(
 					resourceName, name, node.Value)
 			}
 		}
+	}
+	// Dynamic fields with any OAS default are server-initialised: the server will apply
+	// the default when the client omits the field, so mark as Computed.
+	if f.Type == "dynamic" && schema.Default != nil {
+		f.Computed = true
 	}
 	f.Sensitive = isSensitiveField(name, schema)
 
@@ -193,6 +207,9 @@ func buildFieldSpec(
 func decodeDefaultNode(node *yaml.Node, fieldType string) any {
 	if node == nil || node.Tag == "!!null" {
 		return nil
+	}
+	if fieldType == "dynamic" {
+		return nil // static defaults are not representable in a DynamicAttribute
 	}
 	if node.Kind == yaml.SequenceNode {
 		if fieldType == "array" {

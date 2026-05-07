@@ -20,6 +20,7 @@ func TestFieldToAttrType_primitives(t *testing.T) {
 		{"integer", types.Int64Type},
 		{"number", types.Float64Type},
 		{"boolean", types.BoolType},
+		{"dynamic", types.DynamicType},
 		{"unknown", types.StringType}, // fallback
 	}
 	for _, c := range cases {
@@ -589,6 +590,45 @@ func TestFieldToSchemaAttr_default_not_applied_to_readonly(t *testing.T) {
 	}
 	if attr.Default != nil {
 		t.Fatal("Default must not be set on non-writable (readonly) fields")
+	}
+}
+
+// --- fieldToSchemaAttr dynamic -------------------------------------------------------------------
+
+func TestFieldToSchemaAttr_dynamic_optional_computed(t *testing.T) {
+	// Untyped writable field with OAS default: Optional+Computed, no static Terraform default.
+	f := &spec.FieldSpec{Name: "emails", Type: "dynamic", Writable: true, Computed: true}
+	got := fieldToSchemaAttr(f)
+	attr, ok := got.(schema.DynamicAttribute)
+	if !ok {
+		t.Fatalf("expected DynamicAttribute, got %T", got)
+	}
+	if !attr.Optional || !attr.Computed || attr.Required {
+		t.Fatalf("Optional=%v Computed=%v Required=%v", attr.Optional, attr.Computed, attr.Required)
+	}
+	if len(attr.PlanModifiers) != 1 {
+		t.Fatalf("expected 1 plan modifier (UseNonNullStateForUnknown), got %d", len(attr.PlanModifiers))
+	}
+}
+
+func TestFieldToSchemaAttr_dynamic_optional_not_computed(t *testing.T) {
+	// Untyped writable field with no OAS default: Optional only.
+	f := &spec.FieldSpec{Name: "payload", Type: "dynamic", Writable: true}
+	got := fieldToSchemaAttr(f)
+	attr, ok := got.(schema.DynamicAttribute)
+	if !ok {
+		t.Fatalf("expected DynamicAttribute, got %T", got)
+	}
+	if attr.Required || !attr.Optional || attr.Computed {
+		t.Fatalf("Optional=%v Computed=%v Required=%v", attr.Optional, attr.Computed, attr.Required)
+	}
+}
+
+func TestFieldToDSAttr_dynamic(t *testing.T) {
+	f := &spec.FieldSpec{Name: "payload", Type: "dynamic"}
+	got := fieldToDSAttr(f)
+	if _, ok := got.(dsschema.DynamicAttribute); !ok {
+		t.Fatalf("expected DynamicAttribute, got %T", got)
 	}
 }
 

@@ -355,6 +355,34 @@ func TestBuildFieldSpec_Default(t *testing.T) {
 		}
 	})
 
+	t.Run("untyped field with sequence default becomes dynamic and computed", func(t *testing.T) {
+		// No type declaration → dynamic. OAS default present → server-initialised → Computed.
+		f := getField("DefaultEmptyArrayNoType")
+		if f.Type != "dynamic" {
+			t.Errorf("Type = %q, want %q", f.Type, "dynamic")
+		}
+		if f.Default != nil {
+			t.Errorf("Default = %v, want nil (no static default for dynamic fields)", f.Default)
+		}
+		if !f.Computed {
+			t.Error("Computed should be true (OAS default signals server initialisation)")
+		}
+	})
+
+	t.Run("untyped field with no default becomes dynamic not computed", func(t *testing.T) {
+		proxy, ok := model.Model.Components.Schemas.Get("UntypedNoDefault")
+		if !ok {
+			t.Fatal("UntypedNoDefault schema not found")
+		}
+		f := buildFieldSpec("res", "field", proxy.Schema(), true, false)
+		if f.Type != "dynamic" {
+			t.Errorf("Type = %q, want %q", f.Type, "dynamic")
+		}
+		if f.Computed {
+			t.Error("Computed should be false (no OAS default)")
+		}
+	})
+
 	t.Run("no default when not writable", func(t *testing.T) {
 		proxy, ok := model.Model.Components.Schemas.Get("DefaultInteger")
 		if !ok {

@@ -134,4 +134,8 @@ components:
     DefaultNull:
       type: string
       default: null
+    DefaultEmptyArrayNoType:
+      default: []
+    UntypedNoDefault:
+      title: An untyped field with no default
 ...

@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/dynamicplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
@@ -51,6 +52,8 @@ func fieldToDSAttr(f *spec.FieldSpec) dsschema.Attribute {
 		return dsschema.Float64Attribute{Computed: true}
 	case "boolean":
 		return dsschema.BoolAttribute{Computed: true}
+	case "dynamic":
+		return dsschema.DynamicAttribute{Computed: true}
 	case "object":
 		nested := make(map[string]dsschema.Attribute, len(f.Nested))
 		for _, nf := range f.Nested {
@@ -121,6 +124,8 @@ func fieldToDataSourceAttrType(f *spec.FieldSpec) attr.Type {
 			return types.ListType{ElemType: fieldToDataSourceAttrType(f.ItemSpec)}
 		}
 		return types.ListType{ElemType: types.StringType}
+	case "dynamic":
+		return types.DynamicType
 	default:
 		return types.StringType
 	}
@@ -296,6 +301,21 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 			}
 		}
 		return a
+	case "dynamic":
+		planMods := []planmodifier.Dynamic{}
+		if computed {
+			planMods = append(planMods, dynamicplanmodifier.UseNonNullStateForUnknown())
+		}
+		if f.Immutable {
+			planMods = append(planMods, dynamicplanmodifier.RequiresReplace())
+		}
+		return schema.DynamicAttribute{
+			MarkdownDescription: f.Description,
+			Required:            required,
+			Optional:            optional,
+			Computed:            computed,
+			PlanModifiers:       planMods,
+		}
 	default: // string + fallback
 		planMods := []planmodifier.String{}
 		if computed {

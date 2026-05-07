@@ -289,6 +289,87 @@ func TestJsonToAttr_list_wrong_type(t *testing.T) {
 	}
 }
 
+// --- jsonToDynamic / jsonToUntypedValue ----------------------------------------------------------
+
+func TestJsonToDynamic_nil(t *testing.T) {
+	got := jsonToDynamic(nil)
+	if !got.IsNull() {
+		t.Fatal("expected null dynamic for nil input")
+	}
+}
+
+func TestJsonToDynamic_string(t *testing.T) {
+	got := jsonToDynamic("hello")
+	d, ok := got.UnderlyingValue().(types.String)
+	if !ok || d.ValueString() != "hello" {
+		t.Fatalf("expected StringValue(hello), got %v", got)
+	}
+}
+
+func TestJsonToDynamic_integer_float(t *testing.T) {
+	got := jsonToDynamic(float64(42))
+	d, ok := got.UnderlyingValue().(types.Int64)
+	if !ok || d.ValueInt64() != 42 {
+		t.Fatalf("expected Int64Value(42), got %v", got)
+	}
+}
+
+func TestJsonToDynamic_fractional_float(t *testing.T) {
+	got := jsonToDynamic(float64(3.14))
+	d, ok := got.UnderlyingValue().(types.Float64)
+	if !ok || d.ValueFloat64() != 3.14 {
+		t.Fatalf("expected Float64Value(3.14), got %v", got)
+	}
+}
+
+func TestJsonToDynamic_bool(t *testing.T) {
+	got := jsonToDynamic(true)
+	d, ok := got.UnderlyingValue().(types.Bool)
+	if !ok || !d.ValueBool() {
+		t.Fatalf("expected BoolValue(true), got %v", got)
+	}
+}
+
+func TestJsonToDynamic_empty_array(t *testing.T) {
+	got := jsonToDynamic([]any{})
+	list, ok := got.UnderlyingValue().(types.List)
+	if !ok || list.IsNull() || len(list.Elements()) != 0 {
+		t.Fatalf("expected empty list, got %v", got)
+	}
+}
+
+func TestJsonToDynamic_string_array(t *testing.T) {
+	got := jsonToDynamic([]any{"a@example.com", "b@example.com"})
+	list, ok := got.UnderlyingValue().(types.List)
+	if !ok || list.IsNull() || len(list.Elements()) != 2 {
+		t.Fatalf("expected 2-element list, got %v", got)
+	}
+	if list.Elements()[0] != types.StringValue("a@example.com") {
+		t.Fatalf("first element: got %v", list.Elements()[0])
+	}
+}
+
+func TestJsonToDynamic_roundtrip_via_attrToJSON(t *testing.T) {
+	// Dynamic wrapping a list → attrToJSONField → back to []any.
+	list, _ := types.ListValue(types.StringType, []attr.Value{
+		types.StringValue("x"),
+		types.StringValue("y"),
+	})
+	dyn := types.DynamicValue(list)
+	got, ok := attrToJSONField(dyn, nil).([]any)
+	if !ok || len(got) != 2 || got[0] != "x" {
+		t.Fatalf("roundtrip failed, got %v", got)
+	}
+}
+
+func TestJsonToDynamic_null_roundtrip(t *testing.T) {
+	dyn := types.DynamicNull()
+	got := attrToJSONField(dyn, nil)
+	if got != nil {
+		t.Fatalf("null dynamic should serialize to nil, got %v", got)
+	}
+}
+
 // --- jsonToObject --------------------------------------------------------------------------------
 
 func TestJsonToObject_roundtrip(t *testing.T) {

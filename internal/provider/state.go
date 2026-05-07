@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -67,6 +68,11 @@ func attrToJSONField(v attr.Value, f *spec.FieldSpec) any {
 		return t.ValueFloat64()
 	case types.Bool:
 		return t.ValueBool()
+	case types.Dynamic:
+		if t.IsNull() || t.IsUnknown() {
+			return nil
+		}
+		return attrToJSONField(t.UnderlyingValue(), nil)
 	case types.Object:
 		var nested []*spec.FieldSpec
 		if f != nil {
@@ -111,6 +117,8 @@ func jsonToObject(
 // jsonToAttrField is like jsonToAttr but uses field spec for nested name mapping.
 func jsonToAttrField(v any, t attr.Type, f *spec.FieldSpec) attr.Value {
 	switch at := t.(type) {
+	case basetypes.DynamicType:
+		return jsonToDynamic(v)
 	case basetypes.ObjectType:
 		if v == nil {
 			return types.ObjectNull(at.AttrTypes)
@@ -225,6 +233,64 @@ func jsonToAttr(v any, t attr.Type) attr.Value {
 	// Fallback: string representation
 	if v == nil {
 		return types.StringNull()
+	}
+	return types.StringValue(fmt.Sprint(v))
+}
+
+// jsonToDynamic converts any JSON value to a types.Dynamic Terraform value.
+func jsonToDynamic(v any) types.Dynamic {
+	if v == nil {
+		return types.DynamicNull()
+	}
+	return types.DynamicValue(jsonToUntypedValue(v))
+}
+
+// jsonToUntypedValue converts a JSON-decoded value to the best-fit Terraform attr.Value
+// without schema context. Used for dynamic attributes where no type is declared in OAS.
+func jsonToUntypedValue(v any) attr.Value {
+	if v == nil {
+		return types.StringNull()
+	}
+	switch t := v.(type) {
+	case string:
+		return types.StringValue(t)
+	case float64:
+		if t == float64(int64(t)) {
+			return types.Int64Value(int64(t))
+		}
+		return types.Float64Value(t)
+	case bool:
+		return types.BoolValue(t)
+	case []any:
+		if len(t) == 0 {
+			list, _ := types.ListValue(types.StringType, []attr.Value{})
+			return list
+		}
+		elems := make([]attr.Value, len(t))
+		for i, item := range t {
+			elems[i] = jsonToUntypedValue(item)
+		}
+		elemType := elems[0].Type(context.Background())
+		list, err := types.ListValue(elemType, elems)
+		if err != nil {
+			// Mixed element types: fall back to string list.
+			strElems := make([]attr.Value, len(t))
+			for i, item := range t {
+				strElems[i] = types.StringValue(fmt.Sprint(item))
+			}
+			list, _ = types.ListValue(types.StringType, strElems)
+		}
+		return list
+	case map[string]any:
+		attrTypes := make(map[string]attr.Type, len(t))
+		attrs := make(map[string]attr.Value, len(t))
+		for k, val := range t {
+			av := jsonToUntypedValue(val)
+			attrTypes[k] = av.Type(context.Background())
+			attrs[k] = av
+		}
+		obj, _ := types.ObjectValue(attrTypes, attrs)
+		return obj
 	}
 	return types.StringValue(fmt.Sprint(v))
 }
