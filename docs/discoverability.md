@@ -5,6 +5,7 @@ Since this provider is fully dynamic, there are no pre-generated resource docs.
 Two built-in mechanisms let you discover what resources and data sources are available for a given
 OpenAPI spec. Helping you debugging any issues you could face.
 
+
 ## 1. Terraform `<prefix>_manifest` data source
 
 A built-in data source is always registered alongside the dynamic ones.
@@ -34,6 +35,7 @@ Each entry in `resources` has:
 
 Run `terraform plan` then `terraform apply` to see the output, or use it in CI to validate what
 types are available before writing resource blocks.
+
 
 ## 2. Terraform debug logging
 
