@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	fwpath "github.com/hashicorp/terraform-plugin-framework/path"
@@ -196,7 +197,7 @@ func (self *OpenAPIProvider) Configure(
 func (self *OpenAPIProvider) Resources(ctx context.Context) []func() resource.Resource {
 	factories := make([]func() resource.Resource, 0, len(self.specs))
 	for _, s := range self.specs {
-		tfSchema, attrTypes := buildSchema(s.Fields, self.untypedMode)
+		tfSchema, attrTypes := buildResourceSchema(s.Fields, self.untypedMode)
 		tflog.Debug(
 			ctx,
 			"registered resource",
@@ -275,10 +276,10 @@ func New(version string) func() provider.Provider {
 
 	if untypedMode == UntypedFieldModeError {
 		for _, s := range specs {
-			if hasUntypedField(s.Fields) {
+			if paths := collectUntypedFields(s.Fields, ""); len(paths) > 0 {
 				fmt.Fprintf(os.Stderr,
-					"error: resource %q has untyped fields and OPENAPI_UNTYPED_MODE=error\n",
-					s.SingularName)
+					"error: resource %q has untyped fields %s and OPENAPI_UNTYPED_MODE=error\n",
+					s.SingularName, strings.Join(paths, ", "))
 				os.Exit(1)
 			}
 		}
@@ -302,18 +303,21 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-// hasUntypedField reports whether any field in the slice (or any nested field) has type "untyped".
-func hasUntypedField(fields []*spec.FieldSpec) bool {
+// collectUntypedFields returns dot-notation paths of all fields with type "untyped".
+func collectUntypedFields(fields []*spec.FieldSpec, prefix string) []string {
+	var paths []string
 	for _, f := range fields {
+		name := f.Name
+		if prefix != "" {
+			name = prefix + "." + f.Name
+		}
 		if f.Type == "untyped" {
-			return true
+			paths = append(paths, name)
 		}
-		if hasUntypedField(f.Nested) {
-			return true
-		}
-		if f.ItemSpec != nil && hasUntypedField([]*spec.FieldSpec{f.ItemSpec}) {
-			return true
+		paths = append(paths, collectUntypedFields(f.Nested, name)...)
+		if f.ItemSpec != nil {
+			paths = append(paths, collectUntypedFields([]*spec.FieldSpec{f.ItemSpec}, name+"[]")...)
 		}
 	}
-	return false
+	return paths
 }
