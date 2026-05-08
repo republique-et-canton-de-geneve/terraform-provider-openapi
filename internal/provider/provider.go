@@ -197,20 +197,16 @@ func (self *OpenAPIProvider) Resources(ctx context.Context) []func() resource.Re
 	factories := make([]func() resource.Resource, 0, len(self.specs))
 	for _, s := range self.specs {
 		tfSchema, attrTypes := buildSchema(s.Fields, self.untypedMode)
-		specCopy := s
-		schemaCopy := tfSchema
-		typesCopy := attrTypes
-		prefix := self.prefix
 		tflog.Debug(
 			ctx,
 			"registered resource",
-			map[string]any{"type": prefix + "_" + s.SingularName})
+			map[string]any{"type": self.prefix + "_" + s.SingularName})
 		factories = append(factories, func() resource.Resource {
 			return &DynamicResource{
-				spec:      specCopy,
-				tfSchema:  schemaCopy,
-				attrTypes: typesCopy,
-				prefix:    prefix,
+				spec:      s,
+				tfSchema:  tfSchema,
+				attrTypes: attrTypes,
+				prefix:    self.prefix,
 			}
 		})
 	}
@@ -220,30 +216,26 @@ func (self *OpenAPIProvider) Resources(ctx context.Context) []func() resource.Re
 // DataSources returns one data source factory per discovered spec that has a list path,
 // plus the built-in manifest data source.
 func (self *OpenAPIProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
-	specs := self.specs
-	prefix := self.prefix
-	factories := make([]func() datasource.DataSource, 0, len(specs)+1)
+	factories := make([]func() datasource.DataSource, 0, len(self.specs)+1)
 	factories = append(factories, func() datasource.DataSource {
-		return &ManifestDataSource{specs: specs, prefix: prefix}
+		return &ManifestDataSource{specs: self.specs, prefix: self.prefix}
 	})
-	tflog.Debug(ctx, "registered data source", map[string]any{"type": prefix + "_manifest"})
-	for _, s := range specs {
+	tflog.Debug(ctx, "registered data source", map[string]any{"type": self.prefix + "_manifest"})
+	for _, s := range self.specs {
 		if s.ListPath == "" {
 			continue
 		}
 		attrTypes := buildDataSourceAttrTypes(s.Fields, self.untypedMode)
-		specCopy := s
-		typesCopy := attrTypes
 		tflog.Debug(
 			ctx,
 			"registered data source",
-			map[string]any{"type": prefix + "_" + s.PluralName})
+			map[string]any{"type": self.prefix + "_" + s.PluralName})
 		factories = append(factories, func() datasource.DataSource {
 			return &DynamicDataSource{
-				spec:        specCopy,
-				prefix:      prefix,
+				spec:        s,
+				prefix:      self.prefix,
 				untypedMode: self.untypedMode,
-				attrTypes:   typesCopy,
+				attrTypes:   attrTypes,
 			}
 		})
 	}
