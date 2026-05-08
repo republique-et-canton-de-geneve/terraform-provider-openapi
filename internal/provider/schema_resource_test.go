@@ -81,8 +81,10 @@ func TestFieldToResourceSchemaAttr_computed_readonly(t *testing.T) {
 		t.Fatalf("readonly: Computed=%v Required=%v Optional=%v",
 			attr.Computed, attr.Required, attr.Optional)
 	}
-	if len(attr.PlanModifiers) != 1 {
-		t.Fatal("computed field must have UseNonNullStateForUnknown plan modifier")
+	if len(attr.PlanModifiers) != 0 {
+		t.Fatalf(
+			"readonly non-immutable field must have no plan modifiers, got %d",
+			len(attr.PlanModifiers))
 	}
 }
 
@@ -99,8 +101,10 @@ func TestFieldToResourceSchemaAttr_immutable_string(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
 	}
-	if len(attr.PlanModifiers) != 1 {
-		t.Fatal("immutable field must have RequiresReplace plan modifier")
+	if len(attr.PlanModifiers) != 2 {
+		t.Fatalf(
+			"immutable field must have UseNonNullStateForUnknown+RequiresReplace, got %d",
+			len(attr.PlanModifiers))
 	}
 }
 
@@ -137,8 +141,10 @@ func TestFieldToResourceSchemaAttr_integer_immutable(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Int64Attribute, got %T", got)
 	}
-	if len(attr.PlanModifiers) != 1 {
-		t.Fatal("immutable integer must have RequiresReplace plan modifier")
+	if len(attr.PlanModifiers) != 2 {
+		t.Fatalf(
+			"immutable integer must have UseNonNullStateForUnknown+RequiresReplace, got %d",
+			len(attr.PlanModifiers))
 	}
 }
 
@@ -163,8 +169,10 @@ func TestFieldToResourceSchemaAttr_number_immutable(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected Float64Attribute, got %T", got)
 	}
-	if len(attr.PlanModifiers) != 1 {
-		t.Fatal("immutable number must have RequiresReplace plan modifier")
+	if len(attr.PlanModifiers) != 2 {
+		t.Fatalf(
+			"immutable number must have UseNonNullStateForUnknown+RequiresReplace, got %d",
+			len(attr.PlanModifiers))
 	}
 }
 
@@ -204,8 +212,10 @@ func TestFieldToResourceSchemaAttr_boolean_immutable(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected BoolAttribute, got %T", got)
 	}
-	if len(attr.PlanModifiers) != 1 {
-		t.Fatal("immutable bool must have RequiresReplace plan modifier")
+	if len(attr.PlanModifiers) != 2 {
+		t.Fatalf(
+			"immutable bool must have UseNonNullStateForUnknown+RequiresReplace, got %d",
+			len(attr.PlanModifiers))
 	}
 }
 

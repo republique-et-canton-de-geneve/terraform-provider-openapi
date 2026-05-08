@@ -55,10 +55,8 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 	switch f.Type {
 	case "integer":
 		planMods := []planmodifier.Int64{}
-		if computed {
-			planMods = append(planMods, int64planmodifier.UseNonNullStateForUnknown())
-		}
 		if f.Immutable {
+			planMods = append(planMods, int64planmodifier.UseNonNullStateForUnknown())
 			planMods = append(planMods, int64planmodifier.RequiresReplace())
 		}
 		a := schema.Int64Attribute{
@@ -77,10 +75,8 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		return a
 	case "number":
 		planMods := []planmodifier.Float64{}
-		if computed {
-			planMods = append(planMods, float64planmodifier.UseNonNullStateForUnknown())
-		}
 		if f.Immutable {
+			planMods = append(planMods, float64planmodifier.UseNonNullStateForUnknown())
 			planMods = append(planMods, float64planmodifier.RequiresReplace())
 		}
 		a := schema.Float64Attribute{
@@ -98,10 +94,8 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		return a
 	case "boolean":
 		planMods := []planmodifier.Bool{}
-		if computed {
-			planMods = append(planMods, boolplanmodifier.UseNonNullStateForUnknown())
-		}
 		if f.Immutable {
+			planMods = append(planMods, boolplanmodifier.UseNonNullStateForUnknown())
 			planMods = append(planMods, boolplanmodifier.RequiresReplace())
 		}
 		a := schema.BoolAttribute{
@@ -119,10 +113,8 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		return a
 	case "untyped":
 		planMods := []planmodifier.String{}
-		if computed {
-			planMods = append(planMods, stringplanmodifier.UseNonNullStateForUnknown())
-		}
 		if f.Immutable {
+			planMods = append(planMods, stringplanmodifier.UseNonNullStateForUnknown())
 			planMods = append(planMods, stringplanmodifier.RequiresReplace())
 		}
 		a := schema.StringAttribute{
@@ -186,10 +178,8 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		return a
 	default: // string + fallback
 		planMods := []planmodifier.String{}
-		if computed {
-			planMods = append(planMods, stringplanmodifier.UseNonNullStateForUnknown())
-		}
 		if f.Immutable {
+			planMods = append(planMods, stringplanmodifier.UseNonNullStateForUnknown())
 			planMods = append(planMods, stringplanmodifier.RequiresReplace())
 		}
 		a := schema.StringAttribute{
