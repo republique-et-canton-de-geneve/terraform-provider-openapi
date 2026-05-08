@@ -1,8 +1,10 @@
 package provider
 
 import (
+	"encoding/json"
 	"fmt"
 
+	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -59,6 +61,15 @@ func attrToJSONField(v attr.Value, f *spec.FieldSpec) any {
 		return nil
 	}
 	switch t := v.(type) {
+	case jsontypes.Normalized:
+		if t.IsNull() || t.IsUnknown() {
+			return nil
+		}
+		var value any
+		if err := json.Unmarshal([]byte(t.ValueString()), &value); err != nil {
+			return t.ValueString()
+		}
+		return value
 	case types.String:
 		return t.ValueString()
 	case types.Int64:
@@ -111,6 +122,15 @@ func jsonToObject(
 // jsonToAttrField is like jsonToAttr but uses field spec for nested name mapping.
 func jsonToAttrField(v any, t attr.Type, f *spec.FieldSpec) attr.Value {
 	switch at := t.(type) {
+	case jsontypes.NormalizedType:
+		if v == nil {
+			return jsontypes.NewNormalizedNull()
+		}
+		b, err := json.Marshal(v)
+		if err != nil {
+			return jsontypes.NewNormalizedNull()
+		}
+		return jsontypes.NewNormalizedValue(string(b))
 	case basetypes.ObjectType:
 		if v == nil {
 			return types.ObjectNull(at.AttrTypes)

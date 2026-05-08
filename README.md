@@ -55,6 +55,7 @@ fields are writable.
 | `OPENAPI_TOKEN` | no | Bearer token sent as `Authorization: Bearer …` |
 | `OPENAPI_INSECURE` | no | Set to `true` to skip TLS certificate verification |
 | `OPENAPI_PREFIX` | no | Resource type name prefix (default `openapi` → `openapi_<name>`) |
+| `OPENAPI_UNTYPED_MODE` | no | How fields with no OAS type are handled (default `json`; see below) |
 | `OPENAPI_OK_LOG_LEVEL` | no | Log level for successful API calls (default `TRACE`) |
 | `OPENAPI_KO_LOG_LEVEL` | no | Log level for failed API calls (default `ERROR`) |
 
@@ -63,18 +64,20 @@ fields are writable.
 
 ```hcl
 provider "openapi" {
-  url      = "https://api.example.com/v1"
-  token    = var.api_token # or OPENAPI_TOKEN
-  insecure = false
-  prefix   = "openapi" # must match OPENAPI_PREFIX
+  url          = "https://api.example.com/v1"
+  token        = var.api_token # or OPENAPI_TOKEN
+  insecure     = false
+  prefix       = "openapi"    # must match OPENAPI_PREFIX
+  untyped_mode = "json"       # must match OPENAPI_UNTYPED_MODE
 }
 ```
 
 All attributes are optional in the provider configuration block if the corresponding environment
 variable is set.
 
-The `prefix` is special: resource type names are fixed at init time from `OPENAPI_PREFIX`,
-the configuration value is only used for validation.
+`prefix` and `untyped_mode` are special: resource schemas are built at init time from environment
+variables, before the provider block is evaluated. Declaring them here lets Terraform detect a
+mismatch at configure time instead of silently using the wrong schema.
 
 
 ## Resource discovery
@@ -114,10 +117,19 @@ types at runtime. Please see [docs/discoverability.md][discoverability].
 | present in POST body | `Optional` / `Required` depending on OAS3 `required` |
 | absent from POST body | `Computed: true` |
 | `default:` | `Optional + Computed` with a static default; see [docs/defaults.md][defaults] |
-| `x-computed: "true"` | `Computed: true` on a writable field whose value is set by the server |
-| `x-immutable: "true"` | `RequiresReplace` plan modifier |
+| no declared `type:` (untyped) | `jsontypes.Normalized` string or startup error; see [docs/typing.md][typing] |
+| `x-computed: "true"` | `Computed: true`; plan shows `(known after apply)` — value can change server-side on any write |
+| `x-immutable: "true"` | `UseNonNullStateForUnknown` + `RequiresReplace` — stable after creation; changing it forces replace |
 | `x-sensitive: "true"` | Marked sensitive in Terraform state |
 | name contains `password`, `secret`, `token`, `api_key`, … | Auto-marked sensitive |
+
+
+## Typing
+
+OAS3 types are mapped to Terraform attribute types at startup. Fields with no declared `type:`
+are treated as untyped and handled according to the `untyped_mode` setting.
+
+See [docs/typing.md][typing] for the full type mapping and untyped field modes.
 
 
 ## Validation
@@ -133,8 +145,8 @@ See [docs/validators.md][validators] for the full list and enum pattern details.
 
 | Extension | Scope | Description |
 |---|---|---|
-| `x-computed` | field | Writable field whose value is set by the server if omitted |
-| `x-immutable` | field | Field cannot be changed after creation (forces replace) |
+| `x-computed` | field | Server sets or updates this field; plan always shows `(known after apply)` |
+| `x-immutable` | field | Stable after creation: prior value preserved in plan, changing it forces replace |
 | `x-sensitive` | field | Field value is redacted in plan and state |
 
 See [docs/architecture/extensions/index.md][extensions] for full documentation, naming rationale,
@@ -327,4 +339,5 @@ Use `TF_LOG=DEBUG` to see structured API call logs from the provider.
 [sdk]: https://developer.hashicorp.com/terraform/plugin/framework-benefits
 [terraform-downloads]: https://developer.hashicorp.com/terraform/downloads
 [tpf]: https://github.com/hashicorp/terraform-plugin-framework
+[typing]: docs/typing.md
 [validators]: docs/validators.md

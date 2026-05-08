@@ -108,6 +108,19 @@ func buildFieldSpec(
 		return f
 	}
 	f.Type = detectType(schema)
+	// Fields with no declared type and no structural hints accept any JSON value.
+	if f.Type == "string" && len(schema.Type) == 0 &&
+		len(schema.Enum) == 0 &&
+		len(schema.AllOf) == 0 &&
+		len(schema.OneOf) == 0 &&
+		len(schema.AnyOf) == 0 {
+		f.Type = "untyped"
+		// A default: in the OAS spec means the server initialises the field; mark Computed
+		// so the provider preserves the server-set value even when the decoded Go default is nil.
+		if schema.Default != nil {
+			f.Computed = true
+		}
+	}
 	f.Format = schema.Format
 
 	// Behaviour: Writable set first as Computed and Required derive from it
@@ -195,7 +208,7 @@ func decodeDefaultNode(node *yaml.Node, fieldType string) any {
 		return nil
 	}
 	if node.Kind == yaml.SequenceNode {
-		if fieldType == "array" {
+		if fieldType == "array" || fieldType == "untyped" {
 			return []any{} // only empty-array defaults are supported
 		}
 		return nil

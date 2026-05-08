@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	fwpath "github.com/hashicorp/terraform-plugin-framework/path"
@@ -23,18 +24,20 @@ var _ provider.Provider = &OpenAPIProvider{}
 // OPENAPI_SPEC at New() time so that Resources() can return the full list of dynamically
 // discovered resource types before Configure() is called.
 type OpenAPIProvider struct {
-	version string
-	prefix  string // resource type name prefix, e.g. "openapi" produces openapi_<name>
-	specs   []*spec.ResourceSpec
+	version     string
+	prefix      string           // resource name prefix, e.g. "openapi" produces openapi_<name>
+	untypedMode UntypedFieldMode // how untyped OAS fields are exposed
+	specs       []*spec.ResourceSpec
 }
 
 type OpenAPIProviderModel struct {
-	URL      types.String `tfsdk:"url"`
-	Token    types.String `tfsdk:"token"`
-	Insecure types.Bool   `tfsdk:"insecure"`
-	Prefix   types.String `tfsdk:"prefix"`
-	OKLevel  types.String `tfsdk:"ok_api_calls_log_level"`
-	KOLevel  types.String `tfsdk:"ko_api_calls_log_level"`
+	URL         types.String `tfsdk:"url"`
+	Token       types.String `tfsdk:"token"`
+	Insecure    types.Bool   `tfsdk:"insecure"`
+	Prefix      types.String `tfsdk:"prefix"`
+	OKLevel     types.String `tfsdk:"ok_api_calls_log_level"`
+	KOLevel     types.String `tfsdk:"ko_api_calls_log_level"`
+	UntypedMode types.String `tfsdk:"untyped_mode"`
 }
 
 // Metadata sets the provider type name.
@@ -85,6 +88,12 @@ func (self *OpenAPIProvider) Schema(
 					"May also be provided via OPENAPI_KO_API_CALLS_LOG_LEVEL environment variable.",
 				Optional: true,
 			},
+			"untyped_mode": pfschema.StringAttribute{
+				MarkdownDescription: "How OAS fields with no declared type are exposed. " +
+					"One of `json` (default) or `error`. " +
+					"May also be provided via the OPENAPI_UNTYPED_MODE environment variable.",
+				Optional: true,
+			},
 			"prefix": pfschema.StringAttribute{
 				MarkdownDescription: "Prefix for all resource type names (default `openapi`). " +
 					"For example, prefix `openapi` produces `openapi_vlans`.\n\n" +
@@ -122,6 +131,19 @@ func (self *OpenAPIProvider) Configure(
 					"Resource type names were registered with prefix %q (from OPENAPI_PREFIX). "+
 						"Set OPENAPI_PREFIX=%s before running terraform init/plan/apply.",
 					self.prefix, config.Prefix.ValueString()))
+			return
+		}
+	}
+
+	if !config.UntypedMode.IsNull() && !config.UntypedMode.IsUnknown() {
+		if UntypedFieldMode(config.UntypedMode.ValueString()) != self.untypedMode {
+			resp.Diagnostics.AddAttributeError(
+				fwpath.Root("untyped_mode"),
+				"Untyped Mode Mismatch",
+				fmt.Sprintf(
+					"Schemas were built with untyped_mode=%q (from OPENAPI_UNTYPED_MODE). "+
+						"Set OPENAPI_UNTYPED_MODE=%s before running terraform init/plan/apply.",
+					self.untypedMode, config.UntypedMode.ValueString()))
 			return
 		}
 	}
@@ -175,21 +197,17 @@ func (self *OpenAPIProvider) Configure(
 func (self *OpenAPIProvider) Resources(ctx context.Context) []func() resource.Resource {
 	factories := make([]func() resource.Resource, 0, len(self.specs))
 	for _, s := range self.specs {
-		tfSchema, attrTypes := buildSchema(s.Fields)
-		specCopy := s
-		schemaCopy := tfSchema
-		typesCopy := attrTypes
-		prefix := self.prefix
+		tfSchema, attrTypes := buildResourceSchema(s.Fields)
 		tflog.Debug(
 			ctx,
 			"registered resource",
-			map[string]any{"type": prefix + "_" + s.SingularName})
+			map[string]any{"type": self.prefix + "_" + s.SingularName})
 		factories = append(factories, func() resource.Resource {
 			return &DynamicResource{
-				spec:      specCopy,
-				tfSchema:  schemaCopy,
-				attrTypes: typesCopy,
-				prefix:    prefix,
+				spec:      s,
+				tfSchema:  tfSchema,
+				attrTypes: attrTypes,
+				prefix:    self.prefix,
 			}
 		})
 	}
@@ -199,29 +217,26 @@ func (self *OpenAPIProvider) Resources(ctx context.Context) []func() resource.Re
 // DataSources returns one data source factory per discovered spec that has a list path,
 // plus the built-in manifest data source.
 func (self *OpenAPIProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
-	specs := self.specs
-	prefix := self.prefix
-	factories := make([]func() datasource.DataSource, 0, len(specs)+1)
+	factories := make([]func() datasource.DataSource, 0, len(self.specs)+1)
 	factories = append(factories, func() datasource.DataSource {
-		return &ManifestDataSource{specs: specs, prefix: prefix}
+		return &ManifestDataSource{specs: self.specs, prefix: self.prefix}
 	})
-	tflog.Debug(ctx, "registered data source", map[string]any{"type": prefix + "_manifest"})
-	for _, s := range specs {
+	tflog.Debug(ctx, "registered data source", map[string]any{"type": self.prefix + "_manifest"})
+	for _, s := range self.specs {
 		if s.ListPath == "" {
 			continue
 		}
 		attrTypes := buildDataSourceAttrTypes(s.Fields)
-		specCopy := s
-		typesCopy := attrTypes
 		tflog.Debug(
 			ctx,
 			"registered data source",
-			map[string]any{"type": prefix + "_" + s.PluralName})
+			map[string]any{"type": self.prefix + "_" + s.PluralName})
 		factories = append(factories, func() datasource.DataSource {
 			return &DynamicDataSource{
-				spec:      specCopy,
-				prefix:    prefix,
-				attrTypes: typesCopy,
+				spec:        s,
+				prefix:      self.prefix,
+				untypedMode: self.untypedMode,
+				attrTypes:   attrTypes,
 			}
 		})
 	}
@@ -241,6 +256,16 @@ func New(version string) func() provider.Provider {
 		os.Exit(1)
 	}
 
+	rawMode := envOr("OPENAPI_UNTYPED_MODE", string(UntypedFieldModeJSON))
+	untypedMode := UntypedFieldMode(rawMode)
+	switch untypedMode {
+	case UntypedFieldModeJSON, UntypedFieldModeError:
+	default:
+		fmt.Fprintf(os.Stderr,
+			"error: invalid OPENAPI_UNTYPED_MODE %q, must be json or error\n", rawMode)
+		os.Exit(1)
+	}
+
 	model, err := spec.LoadModel(specSource)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: unable to load spec from %s: %s\n", specSource, err)
@@ -249,11 +274,23 @@ func New(version string) func() provider.Provider {
 
 	specs := spec.DiscoverResources(model)
 
+	if untypedMode == UntypedFieldModeError {
+		for _, s := range specs {
+			if paths := collectUntypedFields(s.Fields, ""); len(paths) > 0 {
+				fmt.Fprintf(os.Stderr,
+					"error: resource %q has untyped fields %s and OPENAPI_UNTYPED_MODE=error\n",
+					s.SingularName, strings.Join(paths, ", "))
+				os.Exit(1)
+			}
+		}
+	}
+
 	return func() provider.Provider {
 		return &OpenAPIProvider{
-			version: version,
-			prefix:  prefix,
-			specs:   specs,
+			version:     version,
+			prefix:      prefix,
+			untypedMode: untypedMode,
+			specs:       specs,
 		}
 	}
 }
@@ -264,4 +301,23 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// collectUntypedFields returns dot-notation paths of all fields with type "untyped".
+func collectUntypedFields(fields []*spec.FieldSpec, prefix string) []string {
+	var paths []string
+	for _, f := range fields {
+		name := f.Name
+		if prefix != "" {
+			name = prefix + "." + f.Name
+		}
+		if f.Type == "untyped" {
+			paths = append(paths, name)
+		}
+		paths = append(paths, collectUntypedFields(f.Nested, name)...)
+		if f.ItemSpec != nil {
+			paths = append(paths, collectUntypedFields([]*spec.FieldSpec{f.ItemSpec}, name+"[]")...)
+		}
+	}
+	return paths
 }
