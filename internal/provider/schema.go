@@ -39,7 +39,7 @@ const (
 func buildDataSourceSchema(fields []*spec.FieldSpec, mode UntypedFieldMode) dsschema.Schema {
 	itemAttrs := make(map[string]dsschema.Attribute, len(fields))
 	for _, f := range fields {
-		itemAttrs[f.Name] = fieldToDSAttr(f, mode)
+		itemAttrs[f.Name] = fieldToDataSourceAttr(f, mode)
 	}
 	return dsschema.Schema{
 		Attributes: map[string]dsschema.Attribute{
@@ -51,9 +51,9 @@ func buildDataSourceSchema(fields []*spec.FieldSpec, mode UntypedFieldMode) dssc
 	}
 }
 
-// fieldToDSAttr converts a FieldSpec to a data source schema attribute.
+// fieldToDataSourceAttr converts a FieldSpec to a data source schema attribute.
 // All attributes are Computed since data sources are read-only.
-func fieldToDSAttr(f *spec.FieldSpec, mode UntypedFieldMode) dsschema.Attribute {
+func fieldToDataSourceAttr(f *spec.FieldSpec, mode UntypedFieldMode) dsschema.Attribute {
 	switch f.Type {
 	case "integer":
 		return dsschema.Int64Attribute{Computed: true}
@@ -66,14 +66,14 @@ func fieldToDSAttr(f *spec.FieldSpec, mode UntypedFieldMode) dsschema.Attribute 
 	case "object":
 		nested := make(map[string]dsschema.Attribute, len(f.Nested))
 		for _, nf := range f.Nested {
-			nested[nf.Name] = fieldToDSAttr(nf, mode)
+			nested[nf.Name] = fieldToDataSourceAttr(nf, mode)
 		}
 		return dsschema.SingleNestedAttribute{Computed: true, Attributes: nested}
 	case "array":
 		if f.ItemSpec != nil && f.ItemSpec.Type == "object" {
 			nested := make(map[string]dsschema.Attribute, len(f.ItemSpec.Nested))
 			for _, nf := range f.ItemSpec.Nested {
-				nested[nf.Name] = fieldToDSAttr(nf, mode)
+				nested[nf.Name] = fieldToDataSourceAttr(nf, mode)
 			}
 			return dsschema.ListNestedAttribute{
 				Computed:     true,

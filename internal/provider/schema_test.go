@@ -413,7 +413,7 @@ func TestFieldToSchemaAttr_array_of_objects(t *testing.T) {
 	}
 }
 
-// --- fieldToDSAttr -------------------------------------------------------------------------------
+// --- fieldToDataSourceAttr -----------------------------------------------------------------------
 
 func TestFieldToDSAttr_primitives(t *testing.T) {
 	cases := []struct {
@@ -427,7 +427,7 @@ func TestFieldToDSAttr_primitives(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.typ, func(t *testing.T) {
-			got := fieldToDSAttr(&spec.FieldSpec{Name: "f", Type: c.typ}, UntypedFieldModeJSON)
+			got := fieldToDataSourceAttr(&spec.FieldSpec{Name: "f", Type: c.typ}, UntypedFieldModeJSON)
 			switch c.typ {
 			case "string":
 				if _, ok := got.(dsschema.StringAttribute); !ok {
@@ -451,7 +451,7 @@ func TestFieldToDSAttr_primitives(t *testing.T) {
 }
 
 func TestFieldToDSAttr_untyped(t *testing.T) {
-	got := fieldToDSAttr(&spec.FieldSpec{Name: "payload", Type: "untyped"}, UntypedFieldModeJSON)
+	got := fieldToDataSourceAttr(&spec.FieldSpec{Name: "payload", Type: "untyped"}, UntypedFieldModeJSON)
 	attr, ok := got.(dsschema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -463,7 +463,7 @@ func TestFieldToDSAttr_untyped(t *testing.T) {
 
 func TestFieldToDSAttr_sensitive_string(t *testing.T) {
 	f := &spec.FieldSpec{Name: "token", Type: "string", Sensitive: true}
-	got := fieldToDSAttr(f, UntypedFieldModeJSON)
+	got := fieldToDataSourceAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(dsschema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -479,7 +479,7 @@ func TestFieldToDSAttr_object(t *testing.T) {
 		Type:   "object",
 		Nested: []*spec.FieldSpec{{Name: "k", Type: "string"}},
 	}
-	got := fieldToDSAttr(f, UntypedFieldModeJSON)
+	got := fieldToDataSourceAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(dsschema.SingleNestedAttribute)
 	if !ok {
 		t.Fatalf("expected SingleNestedAttribute, got %T", got)
@@ -495,7 +495,7 @@ func TestFieldToDSAttr_array_of_strings(t *testing.T) {
 		Type:     "array",
 		ItemSpec: &spec.FieldSpec{Name: "", Type: "string"},
 	}
-	got := fieldToDSAttr(f, UntypedFieldModeJSON)
+	got := fieldToDataSourceAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(dsschema.ListAttribute)
 	if !ok {
 		t.Fatalf("expected ListAttribute, got %T", got)
@@ -507,7 +507,7 @@ func TestFieldToDSAttr_array_of_strings(t *testing.T) {
 
 func TestFieldToDSAttr_array_no_itemspec(t *testing.T) {
 	f := &spec.FieldSpec{Name: "tags", Type: "array"}
-	got := fieldToDSAttr(f, UntypedFieldModeJSON)
+	got := fieldToDataSourceAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(dsschema.ListAttribute)
 	if !ok {
 		t.Fatalf("expected ListAttribute, got %T", got)
@@ -529,7 +529,7 @@ func TestFieldToDSAttr_array_of_objects(t *testing.T) {
 			},
 		},
 	}
-	got := fieldToDSAttr(f, UntypedFieldModeJSON)
+	got := fieldToDataSourceAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(dsschema.ListNestedAttribute)
 	if !ok {
 		t.Fatalf("expected ListNestedAttribute, got %T", got)
@@ -658,5 +658,74 @@ func TestBuildDataSourceSchema_wraps_in_items(t *testing.T) {
 	}
 	if _, ok := nested.NestedObject.Attributes["id"]; !ok {
 		t.Fatal("expected id in nested items schema")
+	}
+}
+
+// --- collectUntypedFields ------------------------------------------------------------------------
+
+func TestCollectUntypedFields(t *testing.T) {
+	cases := []struct {
+		name   string
+		fields []*spec.FieldSpec
+		want   []string
+	}{
+		{
+			name:   "no untyped fields",
+			fields: []*spec.FieldSpec{{Name: "id", Type: "string"}, {Name: "count", Type: "integer"}},
+			want:   nil,
+		},
+		{
+			name:   "top-level untyped",
+			fields: []*spec.FieldSpec{{Name: "payload", Type: "untyped"}},
+			want:   []string{"payload"},
+		},
+		{
+			name: "nested untyped inside object",
+			fields: []*spec.FieldSpec{{
+				Name: "meta",
+				Type: "object",
+				Nested: []*spec.FieldSpec{
+					{Name: "id", Type: "string"},
+					{Name: "extra", Type: "untyped"},
+				},
+			}},
+			want: []string{"meta.extra"},
+		},
+		{
+			name: "untyped array item",
+			fields: []*spec.FieldSpec{{
+				Name:     "tags",
+				Type:     "array",
+				ItemSpec: &spec.FieldSpec{Name: "item", Type: "untyped"},
+			}},
+			want: []string{"tags[].item"},
+		},
+		{
+			name: "mixed top-level and nested",
+			fields: []*spec.FieldSpec{
+				{Name: "payload", Type: "untyped"},
+				{
+					Name: "meta",
+					Type: "object",
+					Nested: []*spec.FieldSpec{
+						{Name: "extra", Type: "untyped"},
+					},
+				},
+			},
+			want: []string{"payload", "meta.extra"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := collectUntypedFields(c.fields, "")
+			if len(got) != len(c.want) {
+				t.Fatalf("got %v, want %v", got, c.want)
+			}
+			for i, v := range got {
+				if v != c.want[i] {
+					t.Errorf("[%d] got %q, want %q", i, v, c.want[i])
+				}
+			}
+		})
 	}
 }
