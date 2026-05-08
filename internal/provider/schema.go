@@ -1,9 +1,11 @@
 package provider
 
 import (
+	"encoding/json"
 	"math"
 	"regexp"
 
+	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -24,12 +26,20 @@ import (
 	"github.com/republique-et-canton-de-geneve/terraform-provider-openapi/internal/spec"
 )
 
+// UntypedFieldMode controls how OAS fields with no declared type are exposed in the schema.
+type UntypedFieldMode string
+
+const (
+	UntypedFieldModeJSON  UntypedFieldMode = "json"
+	UntypedFieldModeError UntypedFieldMode = "error"
+)
+
 // buildDataSourceSchema returns a data source schema with a single computed
 // "items" list attribute whose element type mirrors the resource item schema.
-func buildDataSourceSchema(fields []*spec.FieldSpec) dsschema.Schema {
+func buildDataSourceSchema(fields []*spec.FieldSpec, mode UntypedFieldMode) dsschema.Schema {
 	itemAttrs := make(map[string]dsschema.Attribute, len(fields))
 	for _, f := range fields {
-		itemAttrs[f.Name] = fieldToDSAttr(f)
+		itemAttrs[f.Name] = fieldToDSAttr(f, mode)
 	}
 	return dsschema.Schema{
 		Attributes: map[string]dsschema.Attribute{
@@ -43,7 +53,7 @@ func buildDataSourceSchema(fields []*spec.FieldSpec) dsschema.Schema {
 
 // fieldToDSAttr converts a FieldSpec to a data source schema attribute.
 // All attributes are Computed since data sources are read-only.
-func fieldToDSAttr(f *spec.FieldSpec) dsschema.Attribute {
+func fieldToDSAttr(f *spec.FieldSpec, mode UntypedFieldMode) dsschema.Attribute {
 	switch f.Type {
 	case "integer":
 		return dsschema.Int64Attribute{Computed: true}
@@ -51,17 +61,19 @@ func fieldToDSAttr(f *spec.FieldSpec) dsschema.Attribute {
 		return dsschema.Float64Attribute{Computed: true}
 	case "boolean":
 		return dsschema.BoolAttribute{Computed: true}
+	case "untyped":
+		return dsschema.StringAttribute{CustomType: jsontypes.NormalizedType{}, Computed: true}
 	case "object":
 		nested := make(map[string]dsschema.Attribute, len(f.Nested))
 		for _, nf := range f.Nested {
-			nested[nf.Name] = fieldToDSAttr(nf)
+			nested[nf.Name] = fieldToDSAttr(nf, mode)
 		}
 		return dsschema.SingleNestedAttribute{Computed: true, Attributes: nested}
 	case "array":
 		if f.ItemSpec != nil && f.ItemSpec.Type == "object" {
 			nested := make(map[string]dsschema.Attribute, len(f.ItemSpec.Nested))
 			for _, nf := range f.ItemSpec.Nested {
-				nested[nf.Name] = fieldToDSAttr(nf)
+				nested[nf.Name] = fieldToDSAttr(nf, mode)
 			}
 			return dsschema.ListNestedAttribute{
 				Computed:     true,
@@ -70,7 +82,7 @@ func fieldToDSAttr(f *spec.FieldSpec) dsschema.Attribute {
 		}
 		elemType := attr.Type(types.StringType)
 		if f.ItemSpec != nil {
-			elemType = fieldToDataSourceAttrType(f.ItemSpec)
+			elemType = fieldToDataSourceAttrType(f.ItemSpec, mode)
 		}
 		return dsschema.ListAttribute{Computed: true, ElementType: elemType}
 	default:
@@ -80,29 +92,29 @@ func fieldToDSAttr(f *spec.FieldSpec) dsschema.Attribute {
 
 // buildSchema converts a slice of FieldSpecs to a Terraform schema and a parallel attrTypes map
 // used for state encoding/decoding.
-func buildSchema(fields []*spec.FieldSpec) (schema.Schema, map[string]attr.Type) {
+func buildSchema(fields []*spec.FieldSpec, mode UntypedFieldMode) (schema.Schema, map[string]attr.Type) {
 	attributes := make(map[string]schema.Attribute, len(fields))
 	attrTypes := make(map[string]attr.Type, len(fields))
 	for _, f := range fields {
-		attributes[f.Name] = fieldToSchemaAttr(f)
-		attrTypes[f.Name] = fieldToResourceAttrType(f)
+		attributes[f.Name] = fieldToSchemaAttr(f, mode)
+		attrTypes[f.Name] = fieldToResourceAttrType(f, mode)
 	}
 	return schema.Schema{Attributes: attributes}, attrTypes
 }
 
 // fieldToResourceAttrType returns the attr.Type used for resource state encoding.
 // ID fields are coerced to StringType so that terraform import works regardless of the API type.
-func fieldToResourceAttrType(f *spec.FieldSpec) attr.Type {
+func fieldToResourceAttrType(f *spec.FieldSpec, mode UntypedFieldMode) attr.Type {
 	if f.IsID {
 		return types.StringType
 	}
-	return fieldToDataSourceAttrType(f)
+	return fieldToDataSourceAttrType(f, mode)
 }
 
 // fieldToDataSourceAttrType returns the attr.Type used for data source state encoding.
 // Unlike fieldToResourceAttrType it does not override ID fields, because data sources do not
 // support terraform import and must match the API's actual type.
-func fieldToDataSourceAttrType(f *spec.FieldSpec) attr.Type {
+func fieldToDataSourceAttrType(f *spec.FieldSpec, mode UntypedFieldMode) attr.Type {
 	switch f.Type {
 	case "integer":
 		return types.Int64Type
@@ -110,15 +122,17 @@ func fieldToDataSourceAttrType(f *spec.FieldSpec) attr.Type {
 		return types.Float64Type
 	case "boolean":
 		return types.BoolType
+	case "untyped":
+		return jsontypes.NormalizedType{}
 	case "object":
 		nested := make(map[string]attr.Type, len(f.Nested))
 		for _, nf := range f.Nested {
-			nested[nf.Name] = fieldToDataSourceAttrType(nf)
+			nested[nf.Name] = fieldToDataSourceAttrType(nf, mode)
 		}
 		return types.ObjectType{AttrTypes: nested}
 	case "array":
 		if f.ItemSpec != nil {
-			return types.ListType{ElemType: fieldToDataSourceAttrType(f.ItemSpec)}
+			return types.ListType{ElemType: fieldToDataSourceAttrType(f.ItemSpec, mode)}
 		}
 		return types.ListType{ElemType: types.StringType}
 	default:
@@ -128,10 +142,10 @@ func fieldToDataSourceAttrType(f *spec.FieldSpec) attr.Type {
 
 // buildDataSourceAttrTypes builds the attrTypes map for a data source using
 // fieldToDataSourceAttrType so that ID fields keep their natural API type.
-func buildDataSourceAttrTypes(fields []*spec.FieldSpec) map[string]attr.Type {
+func buildDataSourceAttrTypes(fields []*spec.FieldSpec, mode UntypedFieldMode) map[string]attr.Type {
 	m := make(map[string]attr.Type, len(fields))
 	for _, f := range fields {
-		m[f.Name] = fieldToDataSourceAttrType(f)
+		m[f.Name] = fieldToDataSourceAttrType(f, mode)
 	}
 	return m
 }
@@ -168,7 +182,7 @@ func int64Validators(f *spec.FieldSpec) []validator.Int64 {
 
 // fieldToSchemaAttr converts a FieldSpec to the appropriate Terraform schema attribute,
 // applying plan modifiers for immutable and computed fields.
-func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
+func fieldToSchemaAttr(f *spec.FieldSpec, mode UntypedFieldMode) schema.Attribute {
 	// ID field: always computed string, preserved across plan/apply cycles.
 	if f.IsID {
 		return schema.StringAttribute{
@@ -251,10 +265,32 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 			}
 		}
 		return a
+	case "untyped":
+		planMods := []planmodifier.String{}
+		if computed {
+			planMods = append(planMods, stringplanmodifier.UseNonNullStateForUnknown())
+		}
+		if f.Immutable {
+			planMods = append(planMods, stringplanmodifier.RequiresReplace())
+		}
+		a := schema.StringAttribute{
+			CustomType:          jsontypes.NormalizedType{},
+			MarkdownDescription: f.Description,
+			Required:            required,
+			Optional:            optional,
+			Computed:            computed,
+			PlanModifiers:       planMods,
+		}
+		if hasDefault {
+			if b, err := json.Marshal(f.Default); err == nil {
+				a.Default = stringdefault.StaticString(string(b))
+			}
+		}
+		return a
 	case "object":
 		nestedAttrs := make(map[string]schema.Attribute, len(f.Nested))
 		for _, nf := range f.Nested {
-			nestedAttrs[nf.Name] = fieldToSchemaAttr(nf)
+			nestedAttrs[nf.Name] = fieldToSchemaAttr(nf, mode)
 		}
 		return schema.SingleNestedAttribute{
 			MarkdownDescription: f.Description,
@@ -267,7 +303,7 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		if f.ItemSpec != nil && f.ItemSpec.Type == "object" {
 			nestedAttrs := make(map[string]schema.Attribute, len(f.ItemSpec.Nested))
 			for _, nf := range f.ItemSpec.Nested {
-				nestedAttrs[nf.Name] = fieldToSchemaAttr(nf)
+				nestedAttrs[nf.Name] = fieldToSchemaAttr(nf, mode)
 			}
 			return schema.ListNestedAttribute{
 				MarkdownDescription: f.Description,
@@ -281,7 +317,7 @@ func fieldToSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		}
 		elemType := attr.Type(types.StringType)
 		if f.ItemSpec != nil {
-			elemType = fieldToResourceAttrType(f.ItemSpec)
+			elemType = fieldToResourceAttrType(f.ItemSpec, mode)
 		}
 		a := schema.ListAttribute{
 			MarkdownDescription: f.Description,

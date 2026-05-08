@@ -3,6 +3,7 @@ package provider
 import (
 	"testing"
 
+	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
 	dsschema "github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -24,7 +25,7 @@ func TestFieldToAttrType_primitives(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.typ, func(t *testing.T) {
-			got := fieldToResourceAttrType(&spec.FieldSpec{Name: "f", Type: c.typ})
+			got := fieldToResourceAttrType(&spec.FieldSpec{Name: "f", Type: c.typ}, UntypedFieldModeJSON)
 			if got != c.want {
 				t.Fatalf("type %q: got %v, want %v", c.typ, got, c.want)
 			}
@@ -32,9 +33,16 @@ func TestFieldToAttrType_primitives(t *testing.T) {
 	}
 }
 
+func TestFieldToAttrType_untyped_is_normalized(t *testing.T) {
+	got := fieldToResourceAttrType(&spec.FieldSpec{Name: "payload", Type: "untyped"}, UntypedFieldModeJSON)
+	if _, ok := got.(jsontypes.NormalizedType); !ok {
+		t.Fatalf("expected NormalizedType, got %T", got)
+	}
+}
+
 func TestFieldToAttrType_id_always_string(t *testing.T) {
 	// Even an integer ID field must map to StringType for terraform import.
-	got := fieldToResourceAttrType(&spec.FieldSpec{Name: "id", Type: "integer", IsID: true})
+	got := fieldToResourceAttrType(&spec.FieldSpec{Name: "id", Type: "integer", IsID: true}, UntypedFieldModeJSON)
 	if got != types.StringType {
 		t.Fatalf("got %v, want StringType", got)
 	}
@@ -46,7 +54,7 @@ func TestFieldToAttrType_object(t *testing.T) {
 		Type:   "object",
 		Nested: []*spec.FieldSpec{{Name: "key", Type: "string"}},
 	}
-	got := fieldToResourceAttrType(f)
+	got := fieldToResourceAttrType(f, UntypedFieldModeJSON)
 	objType, ok := got.(types.ObjectType)
 	if !ok {
 		t.Fatalf("expected ObjectType, got %T", got)
@@ -62,7 +70,7 @@ func TestFieldToAttrType_array_with_itemspec(t *testing.T) {
 		Type:     "array",
 		ItemSpec: &spec.FieldSpec{Name: "", Type: "string"},
 	}
-	got := fieldToResourceAttrType(f)
+	got := fieldToResourceAttrType(f, UntypedFieldModeJSON)
 	listType, ok := got.(types.ListType)
 	if !ok {
 		t.Fatalf("expected ListType, got %T", got)
@@ -74,7 +82,7 @@ func TestFieldToAttrType_array_with_itemspec(t *testing.T) {
 
 func TestFieldToAttrType_array_no_itemspec(t *testing.T) {
 	f := &spec.FieldSpec{Name: "tags", Type: "array"}
-	got := fieldToResourceAttrType(f)
+	got := fieldToResourceAttrType(f, UntypedFieldModeJSON)
 	listType, ok := got.(types.ListType)
 	if !ok {
 		t.Fatalf("expected ListType, got %T", got)
@@ -88,7 +96,7 @@ func TestFieldToAttrType_array_no_itemspec(t *testing.T) {
 
 func TestFieldToDataSourceAttrType_id_keeps_natural_type(t *testing.T) {
 	// Data sources do not support terraform import, so the ID field must keep its API type.
-	got := fieldToDataSourceAttrType(&spec.FieldSpec{Name: "id", Type: "integer", IsID: true})
+	got := fieldToDataSourceAttrType(&spec.FieldSpec{Name: "id", Type: "integer", IsID: true}, UntypedFieldModeJSON)
 	if got != types.Int64Type {
 		t.Fatalf("got %v, want Int64Type", got)
 	}
@@ -107,7 +115,7 @@ func TestFieldToDataSourceAttrType_primitives(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.typ, func(t *testing.T) {
-			got := fieldToDataSourceAttrType(&spec.FieldSpec{Name: "f", Type: c.typ})
+			got := fieldToDataSourceAttrType(&spec.FieldSpec{Name: "f", Type: c.typ}, UntypedFieldModeJSON)
 			if got != c.want {
 				t.Fatalf("type %q: got %v, want %v", c.typ, got, c.want)
 			}
@@ -121,7 +129,7 @@ func TestFieldToDataSourceAttrType_array_with_integer_id_item(t *testing.T) {
 		Type:     "array",
 		ItemSpec: &spec.FieldSpec{Name: "id", Type: "integer", IsID: true},
 	}
-	got := fieldToDataSourceAttrType(f)
+	got := fieldToDataSourceAttrType(f, UntypedFieldModeJSON)
 	listType, ok := got.(types.ListType)
 	if !ok {
 		t.Fatalf("expected ListType, got %T", got)
@@ -136,7 +144,7 @@ func TestBuildDataSourceAttrTypes_id_is_int64(t *testing.T) {
 		{Name: "id", Type: "integer", IsID: true},
 		{Name: "name", Type: "string"},
 	}
-	m := buildDataSourceAttrTypes(fields)
+	m := buildDataSourceAttrTypes(fields, UntypedFieldModeJSON)
 	if m["id"] != types.Int64Type {
 		t.Fatalf("id: got %v, want Int64Type", m["id"])
 	}
@@ -149,7 +157,7 @@ func TestBuildDataSourceAttrTypes_id_is_int64(t *testing.T) {
 
 func TestFieldToSchemaAttr_id(t *testing.T) {
 	f := &spec.FieldSpec{Name: "id", Type: "string", IsID: true}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -164,7 +172,7 @@ func TestFieldToSchemaAttr_id(t *testing.T) {
 
 func TestFieldToSchemaAttr_required_writable_string(t *testing.T) {
 	f := &spec.FieldSpec{Name: "name", Type: "string", Required: true, Writable: true}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -177,7 +185,7 @@ func TestFieldToSchemaAttr_required_writable_string(t *testing.T) {
 
 func TestFieldToSchemaAttr_optional_writable_string(t *testing.T) {
 	f := &spec.FieldSpec{Name: "desc", Type: "string", Required: false, Writable: true}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -189,7 +197,7 @@ func TestFieldToSchemaAttr_optional_writable_string(t *testing.T) {
 
 func TestFieldToSchemaAttr_computed_readonly(t *testing.T) {
 	f := &spec.FieldSpec{Name: "created_at", Type: "string", Writable: false}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -211,7 +219,7 @@ func TestFieldToSchemaAttr_immutable_string(t *testing.T) {
 		Required:  true,
 		Immutable: true,
 	}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -223,7 +231,7 @@ func TestFieldToSchemaAttr_immutable_string(t *testing.T) {
 
 func TestFieldToSchemaAttr_sensitive_string(t *testing.T) {
 	f := &spec.FieldSpec{Name: "password", Type: "string", Writable: true, Sensitive: true}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -235,7 +243,7 @@ func TestFieldToSchemaAttr_sensitive_string(t *testing.T) {
 
 func TestFieldToSchemaAttr_integer(t *testing.T) {
 	f := &spec.FieldSpec{Name: "port", Type: "integer", Writable: true, Required: true}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	if _, ok := got.(schema.Int64Attribute); !ok {
 		t.Fatalf("expected Int64Attribute, got %T", got)
 	}
@@ -249,7 +257,7 @@ func TestFieldToSchemaAttr_integer_immutable(t *testing.T) {
 		Required:  true,
 		Immutable: true,
 	}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.Int64Attribute)
 	if !ok {
 		t.Fatalf("expected Int64Attribute, got %T", got)
@@ -261,7 +269,7 @@ func TestFieldToSchemaAttr_integer_immutable(t *testing.T) {
 
 func TestFieldToSchemaAttr_number(t *testing.T) {
 	f := &spec.FieldSpec{Name: "weight", Type: "number", Writable: true}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	if _, ok := got.(schema.Float64Attribute); !ok {
 		t.Fatalf("expected Float64Attribute, got %T", got)
 	}
@@ -275,7 +283,7 @@ func TestFieldToSchemaAttr_number_immutable(t *testing.T) {
 		Required:  true,
 		Immutable: true,
 	}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.Float64Attribute)
 	if !ok {
 		t.Fatalf("expected Float64Attribute, got %T", got)
@@ -294,7 +302,7 @@ func TestFieldToSchemaAttr_immutable_computed_string(t *testing.T) {
 		Computed:  true,
 		Immutable: true,
 	}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -308,7 +316,7 @@ func TestFieldToSchemaAttr_immutable_computed_string(t *testing.T) {
 
 func TestFieldToSchemaAttr_boolean(t *testing.T) {
 	f := &spec.FieldSpec{Name: "enabled", Type: "boolean", Writable: true}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	if _, ok := got.(schema.BoolAttribute); !ok {
 		t.Fatalf("expected BoolAttribute, got %T", got)
 	}
@@ -316,13 +324,25 @@ func TestFieldToSchemaAttr_boolean(t *testing.T) {
 
 func TestFieldToSchemaAttr_boolean_immutable(t *testing.T) {
 	f := &spec.FieldSpec{Name: "enabled", Type: "boolean", Writable: true, Immutable: true}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.BoolAttribute)
 	if !ok {
 		t.Fatalf("expected BoolAttribute, got %T", got)
 	}
 	if len(attr.PlanModifiers) != 1 {
 		t.Fatal("immutable bool must have RequiresReplace plan modifier")
+	}
+}
+
+func TestFieldToSchemaAttr_untyped(t *testing.T) {
+	f := &spec.FieldSpec{Name: "payload", Type: "untyped", Writable: true}
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
+	attr, ok := got.(schema.StringAttribute)
+	if !ok {
+		t.Fatalf("expected StringAttribute, got %T", got)
+	}
+	if _, ok := attr.CustomType.(jsontypes.NormalizedType); !ok {
+		t.Fatalf("expected NormalizedType CustomType, got %T", attr.CustomType)
 	}
 }
 
@@ -339,7 +359,7 @@ func TestFieldToSchemaAttr_object(t *testing.T) {
 			},
 		},
 	}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.SingleNestedAttribute)
 	if !ok {
 		t.Fatalf("expected SingleNestedAttribute, got %T", got)
@@ -356,7 +376,7 @@ func TestFieldToSchemaAttr_array_of_strings(t *testing.T) {
 		Writable: true,
 		ItemSpec: &spec.FieldSpec{Name: "", Type: "string"},
 	}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.ListAttribute)
 	if !ok {
 		t.Fatalf("expected ListAttribute, got %T", got)
@@ -383,7 +403,7 @@ func TestFieldToSchemaAttr_array_of_objects(t *testing.T) {
 			},
 		},
 	}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.ListNestedAttribute)
 	if !ok {
 		t.Fatalf("expected ListNestedAttribute, got %T", got)
@@ -407,7 +427,7 @@ func TestFieldToDSAttr_primitives(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.typ, func(t *testing.T) {
-			got := fieldToDSAttr(&spec.FieldSpec{Name: "f", Type: c.typ})
+			got := fieldToDSAttr(&spec.FieldSpec{Name: "f", Type: c.typ}, UntypedFieldModeJSON)
 			switch c.typ {
 			case "string":
 				if _, ok := got.(dsschema.StringAttribute); !ok {
@@ -430,9 +450,20 @@ func TestFieldToDSAttr_primitives(t *testing.T) {
 	}
 }
 
+func TestFieldToDSAttr_untyped(t *testing.T) {
+	got := fieldToDSAttr(&spec.FieldSpec{Name: "payload", Type: "untyped"}, UntypedFieldModeJSON)
+	attr, ok := got.(dsschema.StringAttribute)
+	if !ok {
+		t.Fatalf("expected StringAttribute, got %T", got)
+	}
+	if _, ok := attr.CustomType.(jsontypes.NormalizedType); !ok {
+		t.Fatalf("expected NormalizedType CustomType, got %T", attr.CustomType)
+	}
+}
+
 func TestFieldToDSAttr_sensitive_string(t *testing.T) {
 	f := &spec.FieldSpec{Name: "token", Type: "string", Sensitive: true}
-	got := fieldToDSAttr(f)
+	got := fieldToDSAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(dsschema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -448,7 +479,7 @@ func TestFieldToDSAttr_object(t *testing.T) {
 		Type:   "object",
 		Nested: []*spec.FieldSpec{{Name: "k", Type: "string"}},
 	}
-	got := fieldToDSAttr(f)
+	got := fieldToDSAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(dsschema.SingleNestedAttribute)
 	if !ok {
 		t.Fatalf("expected SingleNestedAttribute, got %T", got)
@@ -464,7 +495,7 @@ func TestFieldToDSAttr_array_of_strings(t *testing.T) {
 		Type:     "array",
 		ItemSpec: &spec.FieldSpec{Name: "", Type: "string"},
 	}
-	got := fieldToDSAttr(f)
+	got := fieldToDSAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(dsschema.ListAttribute)
 	if !ok {
 		t.Fatalf("expected ListAttribute, got %T", got)
@@ -476,7 +507,7 @@ func TestFieldToDSAttr_array_of_strings(t *testing.T) {
 
 func TestFieldToDSAttr_array_no_itemspec(t *testing.T) {
 	f := &spec.FieldSpec{Name: "tags", Type: "array"}
-	got := fieldToDSAttr(f)
+	got := fieldToDSAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(dsschema.ListAttribute)
 	if !ok {
 		t.Fatalf("expected ListAttribute, got %T", got)
@@ -498,7 +529,7 @@ func TestFieldToDSAttr_array_of_objects(t *testing.T) {
 			},
 		},
 	}
-	got := fieldToDSAttr(f)
+	got := fieldToDSAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(dsschema.ListNestedAttribute)
 	if !ok {
 		t.Fatalf("expected ListNestedAttribute, got %T", got)
@@ -512,7 +543,7 @@ func TestFieldToDSAttr_array_of_objects(t *testing.T) {
 
 func TestFieldToSchemaAttr_default_string(t *testing.T) {
 	f := &spec.FieldSpec{Name: "status", Type: "string", Writable: true, Default: "active"}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -530,7 +561,7 @@ func TestFieldToSchemaAttr_default_string(t *testing.T) {
 
 func TestFieldToSchemaAttr_default_integer(t *testing.T) {
 	f := &spec.FieldSpec{Name: "size", Type: "integer", Writable: true, Default: int64(30)}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.Int64Attribute)
 	if !ok {
 		t.Fatalf("expected Int64Attribute, got %T", got)
@@ -545,7 +576,7 @@ func TestFieldToSchemaAttr_default_integer(t *testing.T) {
 
 func TestFieldToSchemaAttr_default_boolean(t *testing.T) {
 	f := &spec.FieldSpec{Name: "enabled", Type: "boolean", Writable: true, Default: false}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.BoolAttribute)
 	if !ok {
 		t.Fatalf("expected BoolAttribute, got %T", got)
@@ -566,7 +597,7 @@ func TestFieldToSchemaAttr_default_empty_array(t *testing.T) {
 		Default:  []any{},
 		ItemSpec: &spec.FieldSpec{Name: "", Type: "string"},
 	}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.ListAttribute)
 	if !ok {
 		t.Fatalf("expected ListAttribute, got %T", got)
@@ -582,7 +613,7 @@ func TestFieldToSchemaAttr_default_empty_array(t *testing.T) {
 func TestFieldToSchemaAttr_default_not_applied_to_readonly(t *testing.T) {
 	// Default in spec on a non-writable field (e.g. readOnly) must not be applied to schema.
 	f := &spec.FieldSpec{Name: "created_at", Type: "string", Writable: false, Default: "now"}
-	got := fieldToSchemaAttr(f)
+	got := fieldToSchemaAttr(f, UntypedFieldModeJSON)
 	attr, ok := got.(schema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -599,7 +630,7 @@ func TestBuildSchema_produces_correct_keys(t *testing.T) {
 		{Name: "id", Type: "string", IsID: true},
 		{Name: "name", Type: "string", Writable: true, Required: true},
 	}
-	s, attrTypes := buildSchema(fields)
+	s, attrTypes := buildSchema(fields, UntypedFieldModeJSON)
 	if _, ok := s.Attributes["id"]; !ok {
 		t.Fatal("expected id in schema")
 	}
@@ -616,7 +647,7 @@ func TestBuildDataSourceSchema_wraps_in_items(t *testing.T) {
 		{Name: "id", Type: "string"},
 		{Name: "name", Type: "string"},
 	}
-	s := buildDataSourceSchema(fields)
+	s := buildDataSourceSchema(fields, UntypedFieldModeJSON)
 	items, ok := s.Attributes["items"]
 	if !ok {
 		t.Fatal("expected items attribute")

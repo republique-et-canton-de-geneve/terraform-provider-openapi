@@ -16,10 +16,11 @@ var _ datasource.DataSourceWithConfigure = &DynamicDataSource{}
 
 // DynamicDataSource defines the data source implementation.
 type DynamicDataSource struct {
-	spec      *spec.ResourceSpec
-	prefix    string
-	attrTypes map[string]attr.Type
-	client    *Client
+	spec        *spec.ResourceSpec
+	prefix      string
+	untypedMode UntypedFieldMode
+	attrTypes   map[string]attr.Type
+	client      *Client
 }
 
 type listState struct {
@@ -41,7 +42,7 @@ func (self *DynamicDataSource) Schema(
 	_ datasource.SchemaRequest,
 	resp *datasource.SchemaResponse,
 ) {
-	resp.Schema = buildDataSourceSchema(self.spec.Fields)
+	resp.Schema = buildDataSourceSchema(self.spec.Fields, self.untypedMode)
 }
 
 // Configure receives the shared Client from the provider.
