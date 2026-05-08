@@ -16,7 +16,7 @@ func TestBuildDataSourceSchema_wraps_in_items(t *testing.T) {
 		{Name: "id", Type: "string"},
 		{Name: "name", Type: "string"},
 	}
-	s := buildDataSourceSchema(fields, UntypedFieldModeJSON)
+	s := buildDataSourceSchema(fields)
 	items, ok := s.Attributes["items"]
 	if !ok {
 		t.Fatal("expected items attribute")
@@ -37,7 +37,7 @@ func TestBuildDataSourceAttrTypes_id_is_int64(t *testing.T) {
 		{Name: "id", Type: "integer", IsID: true},
 		{Name: "name", Type: "string"},
 	}
-	m := buildDataSourceAttrTypes(fields, UntypedFieldModeJSON)
+	m := buildDataSourceAttrTypes(fields)
 	if m["id"] != types.Int64Type {
 		t.Fatalf("id: got %v, want Int64Type", m["id"])
 	}
@@ -60,9 +60,7 @@ func TestFieldToDataSourceAttr_primitives(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.typ, func(t *testing.T) {
-			got := fieldToDataSourceAttr(
-				&spec.FieldSpec{Name: "f", Type: c.typ},
-				UntypedFieldModeJSON)
+			got := fieldToDataSourceAttr(&spec.FieldSpec{Name: "f", Type: c.typ})
 			switch c.typ {
 			case "string":
 				if _, ok := got.(dsschema.StringAttribute); !ok {
@@ -86,9 +84,7 @@ func TestFieldToDataSourceAttr_primitives(t *testing.T) {
 }
 
 func TestFieldToDataSourceAttr_untyped(t *testing.T) {
-	got := fieldToDataSourceAttr(
-		&spec.FieldSpec{Name: "payload", Type: "untyped"},
-		UntypedFieldModeJSON)
+	got := fieldToDataSourceAttr(&spec.FieldSpec{Name: "payload", Type: "untyped"})
 	attr, ok := got.(dsschema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -100,7 +96,7 @@ func TestFieldToDataSourceAttr_untyped(t *testing.T) {
 
 func TestFieldToDataSourceAttr_sensitive_string(t *testing.T) {
 	f := &spec.FieldSpec{Name: "token", Type: "string", Sensitive: true}
-	got := fieldToDataSourceAttr(f, UntypedFieldModeJSON)
+	got := fieldToDataSourceAttr(f)
 	attr, ok := got.(dsschema.StringAttribute)
 	if !ok {
 		t.Fatalf("expected StringAttribute, got %T", got)
@@ -116,7 +112,7 @@ func TestFieldToDataSourceAttr_object(t *testing.T) {
 		Type:   "object",
 		Nested: []*spec.FieldSpec{{Name: "k", Type: "string"}},
 	}
-	got := fieldToDataSourceAttr(f, UntypedFieldModeJSON)
+	got := fieldToDataSourceAttr(f)
 	attr, ok := got.(dsschema.SingleNestedAttribute)
 	if !ok {
 		t.Fatalf("expected SingleNestedAttribute, got %T", got)
@@ -132,7 +128,7 @@ func TestFieldToDataSourceAttr_array_of_strings(t *testing.T) {
 		Type:     "array",
 		ItemSpec: &spec.FieldSpec{Name: "", Type: "string"},
 	}
-	got := fieldToDataSourceAttr(f, UntypedFieldModeJSON)
+	got := fieldToDataSourceAttr(f)
 	attr, ok := got.(dsschema.ListAttribute)
 	if !ok {
 		t.Fatalf("expected ListAttribute, got %T", got)
@@ -144,7 +140,7 @@ func TestFieldToDataSourceAttr_array_of_strings(t *testing.T) {
 
 func TestFieldToDataSourceAttr_array_no_itemspec(t *testing.T) {
 	f := &spec.FieldSpec{Name: "tags", Type: "array"}
-	got := fieldToDataSourceAttr(f, UntypedFieldModeJSON)
+	got := fieldToDataSourceAttr(f)
 	attr, ok := got.(dsschema.ListAttribute)
 	if !ok {
 		t.Fatalf("expected ListAttribute, got %T", got)
@@ -166,7 +162,7 @@ func TestFieldToDataSourceAttr_array_of_objects(t *testing.T) {
 			},
 		},
 	}
-	got := fieldToDataSourceAttr(f, UntypedFieldModeJSON)
+	got := fieldToDataSourceAttr(f)
 	attr, ok := got.(dsschema.ListNestedAttribute)
 	if !ok {
 		t.Fatalf("expected ListNestedAttribute, got %T", got)
@@ -180,9 +176,7 @@ func TestFieldToDataSourceAttr_array_of_objects(t *testing.T) {
 
 func TestFieldToDataSourceAttrType_id_keeps_natural_type(t *testing.T) {
 	// Data sources do not support terraform import, so the ID field must keep its API type.
-	got := fieldToDataSourceAttrType(
-		&spec.FieldSpec{Name: "id", Type: "integer", IsID: true},
-		UntypedFieldModeJSON)
+	got := fieldToDataSourceAttrType(&spec.FieldSpec{Name: "id", Type: "integer", IsID: true})
 	if got != types.Int64Type {
 		t.Fatalf("got %v, want Int64Type", got)
 	}
@@ -201,9 +195,7 @@ func TestFieldToDataSourceAttrType_primitives(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.typ, func(t *testing.T) {
-			got := fieldToDataSourceAttrType(
-				&spec.FieldSpec{Name: "f", Type: c.typ},
-				UntypedFieldModeJSON)
+			got := fieldToDataSourceAttrType(&spec.FieldSpec{Name: "f", Type: c.typ})
 			if got != c.want {
 				t.Fatalf("type %q: got %v, want %v", c.typ, got, c.want)
 			}
@@ -217,7 +209,7 @@ func TestFieldToDataSourceAttrType_array_with_integer_id_item(t *testing.T) {
 		Type:     "array",
 		ItemSpec: &spec.FieldSpec{Name: "id", Type: "integer", IsID: true},
 	}
-	got := fieldToDataSourceAttrType(f, UntypedFieldModeJSON)
+	got := fieldToDataSourceAttrType(f)
 	listType, ok := got.(types.ListType)
 	if !ok {
 		t.Fatalf("expected ListType, got %T", got)

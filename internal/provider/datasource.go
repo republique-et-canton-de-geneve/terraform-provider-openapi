@@ -42,7 +42,7 @@ func (self *DynamicDataSource) Schema(
 	_ datasource.SchemaRequest,
 	resp *datasource.SchemaResponse,
 ) {
-	resp.Schema = buildDataSourceSchema(self.spec.Fields, self.untypedMode)
+	resp.Schema = buildDataSourceSchema(self.spec.Fields)
 }
 
 // Configure receives the shared Client from the provider.

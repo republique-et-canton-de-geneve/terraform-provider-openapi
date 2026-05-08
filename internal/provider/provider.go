@@ -24,19 +24,19 @@ var _ provider.Provider = &OpenAPIProvider{}
 // OPENAPI_SPEC at New() time so that Resources() can return the full list of dynamically
 // discovered resource types before Configure() is called.
 type OpenAPIProvider struct {
-	version      string
-	prefix       string           // resource type name prefix, e.g. "openapi" produces openapi_<name>
-	untypedMode  UntypedFieldMode // how untyped OAS fields are exposed
-	specs        []*spec.ResourceSpec
+	version     string
+	prefix      string           // resource name prefix, e.g. "openapi" produces openapi_<name>
+	untypedMode UntypedFieldMode // how untyped OAS fields are exposed
+	specs       []*spec.ResourceSpec
 }
 
 type OpenAPIProviderModel struct {
-	URL           types.String `tfsdk:"url"`
-	Token         types.String `tfsdk:"token"`
-	Insecure      types.Bool   `tfsdk:"insecure"`
-	Prefix        types.String `tfsdk:"prefix"`
-	OKLevel       types.String `tfsdk:"ok_api_calls_log_level"`
-	KOLevel       types.String `tfsdk:"ko_api_calls_log_level"`
+	URL         types.String `tfsdk:"url"`
+	Token       types.String `tfsdk:"token"`
+	Insecure    types.Bool   `tfsdk:"insecure"`
+	Prefix      types.String `tfsdk:"prefix"`
+	OKLevel     types.String `tfsdk:"ok_api_calls_log_level"`
+	KOLevel     types.String `tfsdk:"ko_api_calls_log_level"`
 	UntypedMode types.String `tfsdk:"untyped_mode"`
 }
 
@@ -197,7 +197,7 @@ func (self *OpenAPIProvider) Configure(
 func (self *OpenAPIProvider) Resources(ctx context.Context) []func() resource.Resource {
 	factories := make([]func() resource.Resource, 0, len(self.specs))
 	for _, s := range self.specs {
-		tfSchema, attrTypes := buildResourceSchema(s.Fields, self.untypedMode)
+		tfSchema, attrTypes := buildResourceSchema(s.Fields)
 		tflog.Debug(
 			ctx,
 			"registered resource",
@@ -226,7 +226,7 @@ func (self *OpenAPIProvider) DataSources(ctx context.Context) []func() datasourc
 		if s.ListPath == "" {
 			continue
 		}
-		attrTypes := buildDataSourceAttrTypes(s.Fields, self.untypedMode)
+		attrTypes := buildDataSourceAttrTypes(s.Fields)
 		tflog.Debug(
 			ctx,
 			"registered data source",

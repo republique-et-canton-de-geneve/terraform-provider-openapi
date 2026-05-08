@@ -15,12 +15,12 @@ func TestCollectUntypedFields(t *testing.T) {
 		want   []string
 	}{
 		{
-			name:   "no untyped fields",
+			name: "no untyped fields",
 			fields: []*spec.FieldSpec{
 				{Name: "id", Type: "string"},
 				{Name: "count", Type: "integer"},
 			},
-			want:   nil,
+			want: nil,
 		},
 		{
 			name:   "top-level untyped",

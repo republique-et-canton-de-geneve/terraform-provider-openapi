@@ -22,19 +22,19 @@ import (
 
 // buildResourceSchema converts a slice of FieldSpecs to a Terraform schema and a parallel
 // attrTypes map used for state encoding/decoding.
-func buildResourceSchema(fields []*spec.FieldSpec, mode UntypedFieldMode) (schema.Schema, map[string]attr.Type) {
+func buildResourceSchema(fields []*spec.FieldSpec) (schema.Schema, map[string]attr.Type) {
 	attributes := make(map[string]schema.Attribute, len(fields))
 	attrTypes := make(map[string]attr.Type, len(fields))
 	for _, f := range fields {
-		attributes[f.Name] = fieldToResourceSchemaAttr(f, mode)
-		attrTypes[f.Name] = fieldToResourceAttrType(f, mode)
+		attributes[f.Name] = fieldToResourceSchemaAttr(f)
+		attrTypes[f.Name] = fieldToResourceAttrType(f)
 	}
 	return schema.Schema{Attributes: attributes}, attrTypes
 }
 
 // fieldToResourceSchemaAttr converts a FieldSpec to the appropriate Terraform schema attribute,
 // applying plan modifiers for immutable and computed fields.
-func fieldToResourceSchemaAttr(f *spec.FieldSpec, mode UntypedFieldMode) schema.Attribute {
+func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 	// ID field: always computed string, preserved across plan/apply cycles.
 	if f.IsID {
 		return schema.StringAttribute{
@@ -142,7 +142,7 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec, mode UntypedFieldMode) schema.
 	case "object":
 		nestedAttrs := make(map[string]schema.Attribute, len(f.Nested))
 		for _, nf := range f.Nested {
-			nestedAttrs[nf.Name] = fieldToResourceSchemaAttr(nf, mode)
+			nestedAttrs[nf.Name] = fieldToResourceSchemaAttr(nf)
 		}
 		return schema.SingleNestedAttribute{
 			MarkdownDescription: f.Description,
@@ -155,7 +155,7 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec, mode UntypedFieldMode) schema.
 		if f.ItemSpec != nil && f.ItemSpec.Type == "object" {
 			nestedAttrs := make(map[string]schema.Attribute, len(f.ItemSpec.Nested))
 			for _, nf := range f.ItemSpec.Nested {
-				nestedAttrs[nf.Name] = fieldToResourceSchemaAttr(nf, mode)
+				nestedAttrs[nf.Name] = fieldToResourceSchemaAttr(nf)
 			}
 			return schema.ListNestedAttribute{
 				MarkdownDescription: f.Description,
@@ -169,7 +169,7 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec, mode UntypedFieldMode) schema.
 		}
 		elemType := attr.Type(types.StringType)
 		if f.ItemSpec != nil {
-			elemType = fieldToResourceAttrType(f.ItemSpec, mode)
+			elemType = fieldToResourceAttrType(f.ItemSpec)
 		}
 		a := schema.ListAttribute{
 			MarkdownDescription: f.Description,
@@ -212,9 +212,9 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec, mode UntypedFieldMode) schema.
 
 // fieldToResourceAttrType returns the attr.Type used for resource state encoding.
 // ID fields are coerced to StringType so that terraform import works regardless of the API type.
-func fieldToResourceAttrType(f *spec.FieldSpec, mode UntypedFieldMode) attr.Type {
+func fieldToResourceAttrType(f *spec.FieldSpec) attr.Type {
 	if f.IsID {
 		return types.StringType
 	}
-	return fieldToDataSourceAttrType(f, mode)
+	return fieldToDataSourceAttrType(f)
 }
