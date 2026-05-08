@@ -118,8 +118,8 @@ types at runtime. Please see [docs/discoverability.md][discoverability].
 | absent from POST body | `Computed: true` |
 | `default:` | `Optional + Computed` with a static default; see [docs/defaults.md][defaults] |
 | no declared `type:` (untyped) | `jsontypes.Normalized` string or startup error; see [docs/typing.md][typing] |
-| `x-computed: "true"` | `Computed: true` on a writable field whose value is set by the server |
-| `x-immutable: "true"` | `RequiresReplace` plan modifier |
+| `x-computed: "true"` | `Computed: true`; plan shows `(known after apply)` — value can change server-side on any write |
+| `x-immutable: "true"` | `UseNonNullStateForUnknown` + `RequiresReplace` — stable after creation; changing it forces replace |
 | `x-sensitive: "true"` | Marked sensitive in Terraform state |
 | name contains `password`, `secret`, `token`, `api_key`, … | Auto-marked sensitive |
 
@@ -145,8 +145,8 @@ See [docs/validators.md][validators] for the full list and enum pattern details.
 
 | Extension | Scope | Description |
 |---|---|---|
-| `x-computed` | field | Writable field whose value is set by the server if omitted |
-| `x-immutable` | field | Field cannot be changed after creation (forces replace) |
+| `x-computed` | field | Server sets or updates this field; plan always shows `(known after apply)` |
+| `x-immutable` | field | Stable after creation: prior value preserved in plan, changing it forces replace |
 | `x-sensitive` | field | Field value is redacted in plan and state |
 
 See [docs/architecture/extensions/index.md][extensions] for full documentation, naming rationale,

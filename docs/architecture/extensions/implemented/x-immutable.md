@@ -10,8 +10,11 @@
 ## Description
 
 Marks a field that can be set at creation time but cannot be changed afterward. The provider
-attaches the `RequiresReplace` plan modifier, so Terraform will destroy and recreate the resource
-when the field value changes.
+attaches two plan modifiers:
+
+* `UseNonNullStateForUnknown` — the value is stable after creation, so the prior state value is
+  carried into the plan (no spurious "known after apply" noise).
+* `RequiresReplace` — if the value changes, Terraform destroys and recreates the resource.
 
 
 ## Example

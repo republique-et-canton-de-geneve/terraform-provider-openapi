@@ -9,9 +9,12 @@
 
 ## Description
 
-Marks an optional field whose default value is computed by the server and is not known at plan
-time. Without this extension the provider cannot distinguish between a truly optional field and
-one that gets a silent server-generated default, causing drift after the first apply.
+Marks a field whose value is set or updated by the server independently of the user. The provider
+exposes it as `Computed: true` with no plan modifiers, so the plan always shows it as
+`(known after apply)` after any change.
+
+Use this on fields that can change server-side on every write (e.g. `status`, `last_updated_at`).
+For fields that are set once at creation and never change afterward, use `x-immutable` instead.
 
 
 ## Example
