@@ -55,6 +55,7 @@ fields are writable.
 | `OPENAPI_TOKEN` | no | Bearer token sent as `Authorization: Bearer …` |
 | `OPENAPI_INSECURE` | no | Set to `true` to skip TLS certificate verification |
 | `OPENAPI_PREFIX` | no | Resource type name prefix (default `openapi` → `openapi_<name>`) |
+| `OPENAPI_UNTYPED_MODE` | no | How fields with no OAS type are handled (default `json`; see below) |
 | `OPENAPI_OK_LOG_LEVEL` | no | Log level for successful API calls (default `TRACE`) |
 | `OPENAPI_KO_LOG_LEVEL` | no | Log level for failed API calls (default `ERROR`) |
 
@@ -63,18 +64,20 @@ fields are writable.
 
 ```hcl
 provider "openapi" {
-  url      = "https://api.example.com/v1"
-  token    = var.api_token # or OPENAPI_TOKEN
-  insecure = false
-  prefix   = "openapi" # must match OPENAPI_PREFIX
+  url          = "https://api.example.com/v1"
+  token        = var.api_token # or OPENAPI_TOKEN
+  insecure     = false
+  prefix       = "openapi"    # must match OPENAPI_PREFIX
+  untyped_mode = "json"       # must match OPENAPI_UNTYPED_MODE
 }
 ```
 
 All attributes are optional in the provider configuration block if the corresponding environment
 variable is set.
 
-The `prefix` is special: resource type names are fixed at init time from `OPENAPI_PREFIX`,
-the configuration value is only used for validation.
+`prefix` and `untyped_mode` are special: resource schemas are built at init time from environment
+variables, before the provider block is evaluated. Declaring them here lets Terraform detect a
+mismatch at configure time instead of silently using the wrong schema.
 
 
 ## Resource discovery
@@ -114,10 +117,19 @@ types at runtime. Please see [docs/discoverability.md][discoverability].
 | present in POST body | `Optional` / `Required` depending on OAS3 `required` |
 | absent from POST body | `Computed: true` |
 | `default:` | `Optional + Computed` with a static default; see [docs/defaults.md][defaults] |
+| no declared `type:` (untyped) | `jsontypes.Normalized` string or startup error; see [docs/typing.md][typing] |
 | `x-computed: "true"` | `Computed: true` on a writable field whose value is set by the server |
 | `x-immutable: "true"` | `RequiresReplace` plan modifier |
 | `x-sensitive: "true"` | Marked sensitive in Terraform state |
 | name contains `password`, `secret`, `token`, `api_key`, … | Auto-marked sensitive |
+
+
+## Typing
+
+OAS3 types are mapped to Terraform attribute types at startup. Fields with no declared `type:`
+are treated as untyped and handled according to the `untyped_mode` setting.
+
+See [docs/typing.md][typing] for the full type mapping and untyped field modes.
 
 
 ## Validation
@@ -320,6 +332,7 @@ Restart it (Ctrl-C, then `go run . -debug` again) whenever you rebuild after a c
 Use `TF_LOG=DEBUG` to see structured API call logs from the provider.
 
 [defaults]: docs/defaults.md
+[typing]: docs/typing.md
 [discoverability]: docs/discoverability.md
 [extensions]: docs/architecture/extensions/index.md
 [go-install]: https://golang.org/doc/install

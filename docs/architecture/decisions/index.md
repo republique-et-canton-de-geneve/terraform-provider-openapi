@@ -13,3 +13,4 @@ See [documenting architecture decisions](https://cognitect.com/blog/2011/11/15/d
 | [0007](0007-no-multiregion-no-per-resource-host.md) | No multi-region extension, no per-resource host override | Accepted |
 | [0008](0008-primary-key-design.md) | Primary key design: single field vs composite key | Undecided |
 | [0009](0009-async-polling-design.md) | Async polling design: state machine detection and terminal value signalling | Undecided |
+| [0010](0010-untyped-fields-json-not-dynamic.md) | Untyped OAS fields as jsontypes.Normalized, not Terraform dynamic | Accepted |
