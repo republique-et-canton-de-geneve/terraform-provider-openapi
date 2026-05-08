@@ -27,7 +27,7 @@ needed for current consumers. However, the design should anticipate them.
 
 An extension `x-primary-key` is drafted at schema level (consistent with `x-tf-status`),
 supporting both single field names and composite format strings. See
-[primary-key.md](../../primary-key.md) for the full design, resolution priority, and
+[primary-key.md](../../guides/primary-key.md) for the full design, resolution priority, and
 examples.
 
 **Kept bare** because a primary key is an API-intrinsic concept meaningful to any spec consumer,
@@ -39,7 +39,7 @@ No decision on implementation timing.
 ## Consequences
 
 * `x-primary-key` is documented as TBD in [extensions/planned/x-primary-key.md](../extensions/planned/x-primary-key.md) and
-  [primary-key.md](../../primary-key.md).
+  [primary-key.md](../../guides/primary-key.md).
 * Current code falls back to a field named `id`; `x-primary-key` will complete that heuristic.
 * APIs with no surrogate `id` field (e.g. GitLab-style project variables) cannot be managed
   until this is implemented.

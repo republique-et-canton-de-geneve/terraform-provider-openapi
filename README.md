@@ -13,6 +13,9 @@ State of Geneva (Switzerland).
 _This provider is built on the [Terraform Plugin Framework][tpf].
 See [Which SDK Should I Use?][sdk] in the Terraform documentation for additional information._
 
+For usage documentation see [docs/index.md](docs/index.md) or the
+[Terraform Registry page][registry].
+
 
 ## Why not dikhan/terraform-provider-openapi?
 
@@ -35,162 +38,6 @@ evaluated but not used for three reasons:
 
 * [Terraform][terraform-downloads] >= 1.8
 * [Go][go-install] >= 1.24
-
-
-## How it works
-
-At startup the provider reads the spec identified by `OPENAPI_SPEC` and walks all paths. Pairs of
-paths like `/vlans/` + `/vlans/{id}/` are grouped into a resource named `openapi_vlan` (resource) /
-`openapi_vlans` (data source).
-The GET `200` response schema drives the Terraform schema; the POST request body determines which
-fields are writable.
-
-
-## Environment variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `OPENAPI_SPEC` | yes | Path or HTTPS URL to the OpenAPI 3 spec |
-| `OPENAPI_URL` | yes | Base URL of the API (e.g. `https://api.example.com/v1`) |
-| `OPENAPI_TOKEN` | no | Bearer token sent as `Authorization: Bearer …` |
-| `OPENAPI_INSECURE` | no | Set to `true` to skip TLS certificate verification |
-| `OPENAPI_PREFIX` | no | Resource type name prefix (default `openapi` → `openapi_<name>`) |
-| `OPENAPI_UNTYPED_MODE` | no | How fields with no OAS type are handled (default `json`; see below) |
-| `OPENAPI_OK_LOG_LEVEL` | no | Log level for successful API calls (default `TRACE`) |
-| `OPENAPI_KO_LOG_LEVEL` | no | Log level for failed API calls (default `ERROR`) |
-
-
-## Provider configuration
-
-```hcl
-provider "openapi" {
-  url          = "https://api.example.com/v1"
-  token        = var.api_token # or OPENAPI_TOKEN
-  insecure     = false
-  prefix       = "openapi"    # must match OPENAPI_PREFIX
-  untyped_mode = "json"       # must match OPENAPI_UNTYPED_MODE
-}
-```
-
-All attributes are optional in the provider configuration block if the corresponding environment
-variable is set.
-
-`prefix` and `untyped_mode` are special: resource schemas are built at init time from environment
-variables, before the provider block is evaluated. Declaring them here lets Terraform detect a
-mismatch at configure time instead of silently using the wrong schema.
-
-
-## Resource discovery
-
-The provider groups OAS3 paths into resources using these rules:
-
-* A **collection path** (`/things/`) paired with an **item path** (`/things/{id}/`) becomes
-  `resource "openapi_thing"` and `data "openapi_things"`.
-* Multi-segment paths (`/a/b/`) become `openapi_a_b`.
-* A common path prefix shared by all paths (e.g. `/api/v1/`) is stripped before naming.
-* Resources without a GET `/{id}/` 200 response are silently skipped (no readable schema).
-
-### Singular vs plural naming
-
-The last word of the path segment is inflected automatically:
-
-* **Resources** use the **singular** form: `/vlans/{id}/` -> `resource "openapi_vlan"`
-* **Data sources** use the **plural** form: `/vlans/` -> `data "openapi_vlans"`
-
-Multi-segment paths follow the same rule on the last segment only:
-`/linux-vm/instances/{id}/` -> `resource "openapi_linux_vm_instance"` /
-`data "openapi_linux_vm_instances"`. Hyphens in path segments are replaced with underscores.
-
-
-## Discoverability
-
-The built-in `<prefix>_manifest` data source and `TF_LOG=DEBUG` let you inspect all discovered
-types at runtime. Please see [docs/discoverability.md][discoverability].
-
-
-## Field mapping
-
-| OAS3 property | Terraform behaviour |
-|---|---|
-| camelCase name (e.g. `photoUrls`) | Converted to `snake_case` (`photo_urls`) |
-| `readOnly: true` | `Computed: true`: server-managed, never sent in requests |
-| present in POST body | `Optional` / `Required` depending on OAS3 `required` |
-| absent from POST body | `Computed: true` |
-| `default:` | `Optional + Computed` with a static default; see [docs/defaults.md][defaults] |
-| no declared `type:` (untyped) | `jsontypes.Normalized` string or startup error; see [docs/typing.md][typing] |
-| `x-computed: "true"` | `Computed: true`; plan shows `(known after apply)` — value can change server-side on any write |
-| `x-immutable: "true"` | `UseNonNullStateForUnknown` + `RequiresReplace` — stable after creation; changing it forces replace |
-| `x-sensitive: "true"` | Marked sensitive in Terraform state |
-| name contains `password`, `secret`, `token`, `api_key`, … | Auto-marked sensitive |
-
-
-## Typing
-
-OAS3 types are mapped to Terraform attribute types at startup. Fields with no declared `type:`
-are treated as untyped and handled according to the `untyped_mode` setting.
-
-See [docs/typing.md][typing] for the full type mapping and untyped field modes.
-
-
-## Validation
-
-OAS3 schema constraints (`maxLength`, `minLength`, `pattern`, `minimum`, `maximum`, `enum`) are
-automatically translated into Terraform validators applied at plan time. Enum values expressed via
-`$ref`, `allOf`, or `oneOf` are all recognised.
-
-See [docs/validators.md][validators] for the full list and enum pattern details.
-
-
-## OAS3 extensions
-
-| Extension | Scope | Description |
-|---|---|---|
-| `x-computed` | field | Server sets or updates this field; plan always shows `(known after apply)` |
-| `x-immutable` | field | Stable after creation: prior value preserved in plan, changing it forces replace |
-| `x-sensitive` | field | Field value is redacted in plan and state |
-
-See [docs/architecture/extensions/index.md][extensions] for full documentation, naming rationale,
-and the extensions planned on the roadmap (`x-ignore-order`, `x-tf-exclude`, `x-tf-status`).
-
-
-## Example
-
-Given a spec with:
-
-```yaml
-paths:
-  /vlans/:
-    post:
-      requestBody:
-        content:
-          application/json:
-            schema:
-              properties:
-                name: { type: string }
-                vlan_id: { type: integer, x-immutable: "true" }
-  /vlans/{id}/:
-    get:
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                properties:
-                  id:    { type: integer }
-                  name:  { type: string }
-                  vlan_id: { type: integer, x-immutable: "true" }
-    patch: {}
-    delete: {}
-```
-
-The provider exposes:
-
-```hcl
-resource "openapi_vlan" "core" {
-  name    = "core-network"
-  vlan_id = 100   # immutable: changing this forces replacement
-}
-```
 
 
 ## Building The Provider
@@ -323,7 +170,7 @@ resource "openapi_store_order" "first" {
 }
 ```
 
-OAS3 property names are converted to snake_case (`photoUrls` → `photo_urls`, `petId` → `pet_id`).
+OAS3 property names are converted to snake_case (`photoUrls` -> `photo_urls`, `petId` -> `pet_id`).
 The provider translates back to camelCase when writing to the API.
 
 The provider process in terminal 1 stays alive across multiple `terraform plan` or `apply` calls.
@@ -331,13 +178,8 @@ Restart it (Ctrl-C, then `go run . -debug` again) whenever you rebuild after a c
 
 Use `TF_LOG=DEBUG` to see structured API call logs from the provider.
 
-[defaults]: docs/defaults.md
-[discoverability]: docs/discoverability.md
-[extensions]: docs/architecture/extensions/index.md
 [go-install]: https://golang.org/doc/install
 [registry]: https://registry.terraform.io/providers/republique-et-canton-de-geneve/openapi/latest
 [sdk]: https://developer.hashicorp.com/terraform/plugin/framework-benefits
 [terraform-downloads]: https://developer.hashicorp.com/terraform/downloads
 [tpf]: https://github.com/hashicorp/terraform-plugin-framework
-[typing]: docs/typing.md
-[validators]: docs/validators.md

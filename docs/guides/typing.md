@@ -40,7 +40,7 @@ attribute (or the `OPENAPI_UNTYPED_MODE` environment variable).
 
 
 For the rationale behind these two modes and the decision to drop Terraform's `dynamic` type,
-see [ADR 0010](architecture/decisions/0010-untyped-fields-json-not-dynamic.md).
+see [ADR 0010](../architecture/decisions/0010-untyped-fields-json-not-dynamic.md).
 
 
 ## `untyped_mode` values
