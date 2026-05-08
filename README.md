@@ -332,7 +332,6 @@ Restart it (Ctrl-C, then `go run . -debug` again) whenever you rebuild after a c
 Use `TF_LOG=DEBUG` to see structured API call logs from the provider.
 
 [defaults]: docs/defaults.md
-[typing]: docs/typing.md
 [discoverability]: docs/discoverability.md
 [extensions]: docs/architecture/extensions/index.md
 [go-install]: https://golang.org/doc/install
@@ -340,4 +339,5 @@ Use `TF_LOG=DEBUG` to see structured API call logs from the provider.
 [sdk]: https://developer.hashicorp.com/terraform/plugin/framework-benefits
 [terraform-downloads]: https://developer.hashicorp.com/terraform/downloads
 [tpf]: https://github.com/hashicorp/terraform-plugin-framework
+[typing]: docs/typing.md
 [validators]: docs/validators.md
