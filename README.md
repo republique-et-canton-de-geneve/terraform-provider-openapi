@@ -37,7 +37,7 @@ evaluated but not used for three reasons:
 ## Requirements
 
 * [Terraform][terraform-downloads] >= 1.8
-* [Go][go-install] >= 1.24
+* [Go][go-install] >= 1.25
 
 
 ## Building The Provider
