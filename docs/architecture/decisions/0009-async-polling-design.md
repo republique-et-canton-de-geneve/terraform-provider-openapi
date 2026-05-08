@@ -67,7 +67,7 @@ This is not a commitment. The design must be investigated and will evolve; no gu
 it can be fully realised within a spec-driven model. The initial implementation covers polling
 only.
 
-See also [architecture/state-machine.md](../state-machine.md) for a broader discussion of how
+See also [state-machine.md](../../state-machine.md) for a broader discussion of how
 OAS3 relates to resource state machines and what design we will implement to fullfill requirements.
 
 

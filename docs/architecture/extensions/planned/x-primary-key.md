@@ -15,7 +15,7 @@ separator embedded in the format string is also the separator used for `terrafor
 
 When absent, the provider falls back to a field named `id`.
 
-See [primary-key.md](../../primary-key.md) for a detailed discussion and
+See [primary-key.md](../../../primary-key.md) for a detailed discussion and
 [ADR 0008](../../decisions/0008-primary-key-design.md) for the decision record.
 
 

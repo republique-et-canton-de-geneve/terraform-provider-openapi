@@ -81,4 +81,4 @@ To be continued...
 ## Open questions
 
 How to signal target, error, and pending states to the provider is unresolved. See
-[ADR 0009](decisions/0009-async-polling-design.md) for the options under consideration.
+[ADR 0009](architecture/decisions/0009-async-polling-design.md) for the options under consideration.

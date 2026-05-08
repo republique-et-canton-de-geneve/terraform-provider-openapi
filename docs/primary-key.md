@@ -85,4 +85,4 @@ Unlike resources, data sources do not support `terraform import` and no such con
 ## Open questions
 
 The implementation of `x-primary-key` is not yet scheduled. See
-[ADR 0008](decisions/0008-primary-key-design.md) for the decision record.
+[ADR 0008](architecture/decisions/0008-primary-key-design.md) for the decision record.
