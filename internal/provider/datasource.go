@@ -10,6 +10,10 @@ import (
 	"github.com/republique-et-canton-de-geneve/terraform-provider-openapi/internal/spec"
 )
 
+// nullTimeoutsBlock is a null object with the correct timeouts attr types, used by data sources
+// which have no user-configurable timeouts block.
+var nullTimeoutsBlock = types.ObjectNull(timeoutsAttrTypes)
+
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ datasource.DataSource = &DynamicDataSource{}
 var _ datasource.DataSourceWithConfigure = &DynamicDataSource{}
@@ -81,7 +85,11 @@ func (self *DynamicDataSource) Read(
 		return
 	}
 
-	raw, err := self.client.List(ctx, self.spec.ListPath)
+	readTimeout := resolveTimeout(nullTimeoutsBlock, "read", self.spec.Timeouts.List)
+	ctx, cancel := context.WithTimeout(ctx, readTimeout)
+	defer cancel()
+
+	raw, err := self.client.List(ctx, self.spec.ListPath, readTimeout)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to list "+self.spec.PluralName,

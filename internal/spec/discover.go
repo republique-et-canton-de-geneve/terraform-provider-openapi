@@ -90,6 +90,19 @@ func buildResourceSpec(name string, listInfo, itemInfo *pathInfo) *ResourceSpec 
 		rs.HasDelete = true
 	}
 
+	// Timeouts
+	if listInfo != nil {
+		rs.Timeouts.List = operationTimeout(listInfo.item.Get)
+		rs.Timeouts.Create = operationTimeout(listInfo.item.Post)
+	}
+	rs.Timeouts.Read = operationTimeout(itemInfo.item.Get)
+	if itemInfo.item.Patch != nil {
+		rs.Timeouts.Update = operationTimeout(itemInfo.item.Patch)
+	} else {
+		rs.Timeouts.Update = operationTimeout(itemInfo.item.Put)
+	}
+	rs.Timeouts.Delete = operationTimeout(itemInfo.item.Delete)
+
 	// Schema: use GET /{id}/ 200 response
 	itemSchema := extractResponseSchema(itemInfo.item.Get)
 	if itemSchema == nil {
@@ -125,6 +138,19 @@ func extractResponseSchema(op *v3high.Operation) *base.Schema {
 		}
 	}
 	return nil
+}
+
+// operationTimeout reads the x-timeout extension value from an operation's extensions.
+// Returns an empty string if the extension is absent or the operation is nil.
+func operationTimeout(op *v3high.Operation) string {
+	if op == nil || op.Extensions == nil {
+		return ""
+	}
+	node, ok := op.Extensions.Get("x-timeout")
+	if !ok || node == nil {
+		return ""
+	}
+	return node.Value
 }
 
 // extractRequestBodyFields returns the top-level property names from the JSON request body schema.

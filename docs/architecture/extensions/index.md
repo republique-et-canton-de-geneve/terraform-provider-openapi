@@ -28,7 +28,7 @@ In summary, extensions fall into two categories:
 | Exclude resource from the provider | [`x-tf-exclude`](undecided/x-tf-exclude.md) | resource | undecided | `x-terraform-exclude-resource` | HashiCorp codegen `ignores` config |
 | Override resource type name in Terraform | [`x-tf-name`](undecided/x-tf-name.md) | resource | undecided | `x-terraform-resource-name` | Speakeasy `x-speakeasy-name-override` |
 | ~~Per-resource base URL override~~ | [`x-terraform-resource-host`](rejected/x-terraform-resource-host.md) | resource | rejected | `x-terraform-resource-host` | — |
-| Recommended default timeout per resource action | [`x-timeout`](undecided/x-timeout.md) | operation | undecided | — | — |
+| Recommended default timeout per resource action | [`x-timeout`](implemented/x-timeout.md) | operation | implemented | — | — |
 | Optional field whose default is set by the server | [`x-computed`](implemented/x-computed.md) | field | implemented | `x-terraform-computed` | — |
 | Field cannot be changed after creation | [`x-immutable`](implemented/x-immutable.md) | field | implemented | `x-terraform-immutable`, `x-terraform-force-new` | 640+ usages · ReDoc · OAS [#2720] · Azure `x-ms-mutability: ["create"]` |
 | Array field where item order is insignificant | [`x-ignore-order`](planned/x-ignore-order.md) | field | planned | `x-terraform-ignore-order` | — |

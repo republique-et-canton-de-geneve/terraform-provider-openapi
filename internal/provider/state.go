@@ -29,21 +29,27 @@ func extractID(obj types.Object, idField string) string {
 }
 
 // attrMapToJSON converts a Terraform attribute map (snake_case keys) to a JSON-serialisable map
-// using OASName for API keys. Pass nil fields to use attribute names as-is (no name translation).
+// using OASName for API keys. When fields is non-nil, only attributes present in the spec are
+// serialised, which naturally excludes framework-managed blocks (e.g. timeouts). Pass nil to use
+// attribute names as-is (no name translation), used for nested untyped objects.
 func attrMapToJSON(attrs map[string]attr.Value, fields []*spec.FieldSpec) map[string]any {
-	byName := make(map[string]*spec.FieldSpec, len(fields))
-	for _, f := range fields {
-		byName[f.Name] = f
+	if len(fields) == 0 {
+		result := make(map[string]any, len(attrs))
+		for k, v := range attrs {
+			if val := attrToJSONField(v, nil); val != nil {
+				result[k] = val
+			}
+		}
+		return result
 	}
-	result := make(map[string]any, len(attrs))
-	for k, v := range attrs {
-		f := byName[k]
-		oasKey := k
-		if f != nil {
-			oasKey = f.OASName
+	result := make(map[string]any, len(fields))
+	for _, f := range fields {
+		v, ok := attrs[f.Name]
+		if !ok {
+			continue
 		}
 		if val := attrToJSONField(v, f); val != nil {
-			result[oasKey] = val
+			result[f.OASName] = val
 		}
 	}
 	return result

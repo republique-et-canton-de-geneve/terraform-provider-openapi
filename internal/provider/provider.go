@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	fwpath "github.com/hashicorp/terraform-plugin-framework/path"
@@ -197,17 +198,18 @@ func (self *OpenAPIProvider) Configure(
 func (self *OpenAPIProvider) Resources(ctx context.Context) []func() resource.Resource {
 	factories := make([]func() resource.Resource, 0, len(self.specs))
 	for _, s := range self.specs {
-		tfSchema, attrTypes := buildResourceSchema(s.Fields)
+		tfSchema, attrTypes, timeoutsType := buildResourceSchema(s.Fields, s.Timeouts)
 		tflog.Debug(
 			ctx,
 			"registered resource",
 			map[string]any{"type": self.prefix + "_" + s.SingularName})
 		factories = append(factories, func() resource.Resource {
 			return &DynamicResource{
-				spec:      s,
-				tfSchema:  tfSchema,
-				attrTypes: attrTypes,
-				prefix:    self.prefix,
+				spec:         s,
+				tfSchema:     tfSchema,
+				attrTypes:    attrTypes,
+				timeoutsType: timeoutsType,
+				prefix:       self.prefix,
 			}
 		})
 	}
@@ -273,6 +275,27 @@ func New(version string) func() provider.Provider {
 	}
 
 	specs := spec.DiscoverResources(model)
+
+	for _, s := range specs {
+		for _, op := range []struct{ name, val string }{
+			{"list", s.Timeouts.List},
+			{"create", s.Timeouts.Create},
+			{"read", s.Timeouts.Read},
+			{"update", s.Timeouts.Update},
+			{"delete", s.Timeouts.Delete},
+		} {
+			if op.val == "" {
+				continue
+			}
+			d, err := time.ParseDuration(op.val)
+			if err != nil || d <= 0 {
+				fmt.Fprintf(os.Stderr,
+					"error: resource %q x-timeout %q=%q is not a valid positive duration\n",
+					s.SingularName, op.name, op.val)
+				os.Exit(1)
+			}
+		}
+	}
 
 	if untypedMode == UntypedFieldModeError {
 		for _, s := range specs {

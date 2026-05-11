@@ -1,8 +1,10 @@
 package provider
 
 import (
+	"context"
 	"math"
 	"regexp"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -26,6 +28,31 @@ func stringValidators(f *spec.FieldSpec) []validator.String {
 		vals = append(vals, stringvalidator.OneOf(f.Enum...))
 	}
 	return vals
+}
+
+// positiveDuration validates that a string is a parseable time.Duration greater than zero.
+type positiveDuration struct{}
+
+func (positiveDuration) Description(_ context.Context) string {
+	return "must be a valid duration greater than zero (e.g. \"30m\", \"1h\")"
+}
+
+func (positiveDuration) MarkdownDescription(ctx context.Context) string {
+	return positiveDuration{}.Description(ctx)
+}
+
+func (positiveDuration) ValidateString(_ context.Context, req validator.StringRequest, resp *validator.StringResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	d, err := time.ParseDuration(req.ConfigValue.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddAttributeError(req.Path, "Invalid duration", positiveDuration{}.Description(context.Background()))
+		return
+	}
+	if d <= 0 {
+		resp.Diagnostics.AddAttributeError(req.Path, "Invalid duration", "timeout must be greater than zero")
+	}
 }
 
 // int64Validators builds int64 validators from a FieldSpec's constraints.

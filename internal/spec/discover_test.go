@@ -311,6 +311,56 @@ paths:
 	}
 }
 
+// --- DiscoverResources x-timeout -----------------------------------------------------------------
+
+func TestDiscoverResources_Timeouts(t *testing.T) {
+	specs := DiscoverResources(mustParseFixture(t, "timeouts.yaml"))
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 resource, got %d", len(specs))
+	}
+	rs := specs[0]
+
+	if rs.Timeouts.List != "2m" {
+		t.Errorf("Timeouts.List = %q, want %q", rs.Timeouts.List, "2m")
+	}
+	if rs.Timeouts.Create != "30m" {
+		t.Errorf("Timeouts.Create = %q, want %q", rs.Timeouts.Create, "30m")
+	}
+	if rs.Timeouts.Read != "10s" {
+		t.Errorf("Timeouts.Read = %q, want %q", rs.Timeouts.Read, "10s")
+	}
+	if rs.Timeouts.Update != "15m" {
+		t.Errorf("Timeouts.Update = %q, want %q", rs.Timeouts.Update, "15m")
+	}
+	if rs.Timeouts.Delete != "10m" {
+		t.Errorf("Timeouts.Delete = %q, want %q", rs.Timeouts.Delete, "10m")
+	}
+}
+
+func TestDiscoverResources_TimeoutsAbsent(t *testing.T) {
+	specs := DiscoverResources(mustParseFixture(t, "widgets.yaml"))
+	if len(specs) != 1 {
+		t.Fatalf("expected 1 resource, got %d", len(specs))
+	}
+	rs := specs[0]
+
+	if rs.Timeouts.List != "" {
+		t.Errorf("Timeouts.List = %q, want empty", rs.Timeouts.List)
+	}
+	if rs.Timeouts.Create != "" {
+		t.Errorf("Timeouts.Create = %q, want empty", rs.Timeouts.Create)
+	}
+	if rs.Timeouts.Read != "" {
+		t.Errorf("Timeouts.Read = %q, want empty", rs.Timeouts.Read)
+	}
+	if rs.Timeouts.Update != "" {
+		t.Errorf("Timeouts.Update = %q, want empty", rs.Timeouts.Update)
+	}
+	if rs.Timeouts.Delete != "" {
+		t.Errorf("Timeouts.Delete = %q, want empty", rs.Timeouts.Delete)
+	}
+}
+
 // --- DiscoverResources validation ----------------------------------------------------------------
 
 func TestDiscoverResources_Validation(t *testing.T) {

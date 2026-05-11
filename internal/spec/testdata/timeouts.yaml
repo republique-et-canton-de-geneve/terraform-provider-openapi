@@ -1,0 +1,57 @@
+---
+openapi: "3.0.3"
+info:
+  title: VMs API
+  version: "1"
+paths:
+  /api/v1/vms/:
+    get:
+      x-timeout: "2m"
+    post:
+      x-timeout: "30m"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Created
+  /api/v1/vms/{id}/:
+    get:
+      x-timeout: "10s"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - id
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+    put:
+      x-timeout: "15m"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        "200":
+          description: OK
+    delete:
+      x-timeout: "10m"
+      responses:
+        "204":
+          description: No Content
+...

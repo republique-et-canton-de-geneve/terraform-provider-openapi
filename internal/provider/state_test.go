@@ -364,6 +364,38 @@ func TestJsonToObject_camelCase_name_mapping(t *testing.T) {
 	}
 }
 
+func TestAttrMapToJSON_excludes_keys_not_in_fields(t *testing.T) {
+	// The "timeouts" block is in the plan attrs but must never reach the API body.
+	fields := []*spec.FieldSpec{
+		{Name: "name", OASName: "name", Type: "string"},
+	}
+	timeoutsObj, _ := types.ObjectValue(
+		map[string]attr.Type{
+			"create": types.StringType,
+			"read":   types.StringType,
+			"update": types.StringType,
+			"delete": types.StringType,
+		},
+		map[string]attr.Value{
+			"create": types.StringValue("30m"),
+			"read":   types.StringNull(),
+			"update": types.StringNull(),
+			"delete": types.StringValue("10m"),
+		},
+	)
+	attrs := map[string]attr.Value{
+		"name":     types.StringValue("foo"),
+		"timeouts": timeoutsObj,
+	}
+	result := attrMapToJSON(attrs, fields)
+	if _, ok := result["timeouts"]; ok {
+		t.Error("timeouts block must not appear in the JSON body sent to the API")
+	}
+	if result["name"] != "foo" {
+		t.Errorf("name: got %v, want %q", result["name"], "foo")
+	}
+}
+
 func TestAttrMapToJSON_camelCase_name_mapping(t *testing.T) {
 	// Terraform plan uses snake_case; JSON body sent to API must use camelCase.
 	fields := []*spec.FieldSpec{

@@ -3,8 +3,10 @@ package provider
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	tfschema "github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -15,11 +17,12 @@ import (
 
 // DynamicResource defines the resource implementation.
 type DynamicResource struct {
-	spec      *spec.ResourceSpec
-	tfSchema  tfschema.Schema
-	attrTypes map[string]attr.Type
-	prefix    string
-	client    *Client
+	spec         *spec.ResourceSpec
+	tfSchema     tfschema.Schema
+	attrTypes    map[string]attr.Type
+	timeoutsType types.ObjectType
+	prefix       string
+	client       *Client
 }
 
 // Ensure provider defined types fully satisfy framework interfaces.
@@ -72,12 +75,16 @@ func (self *DynamicResource) Create(
 	req resource.CreateRequest,
 	resp *resource.CreateResponse,
 ) {
-	// Read Terraform plan data into the model.
 	var plan types.Object
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	timeoutsBlock := extractTimeoutsBlock(plan.Attributes(), self.timeoutsType)
+	timeout := resolveTimeout(timeoutsBlock, "create", self.spec.Timeouts.Create)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
 	body := attrMapToJSON(plan.Attributes(), self.spec.Fields)
 	for _, f := range self.spec.Fields {
@@ -98,8 +105,7 @@ func (self *DynamicResource) Create(
 	tflog.Debug(ctx, fmt.Sprintf("Created %s successfully", self.spec.SingularName),
 		map[string]any{"id": raw[self.spec.IDField]})
 
-	// Save created resource into Terraform state.
-	state, diags := jsonToObject(raw, self.spec.Fields, self.attrTypes)
+	state, diags := self.buildStateWithTimeouts(raw, timeoutsBlock)
 	resp.Diagnostics.Append(diags...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, state)...)
 }
@@ -110,12 +116,16 @@ func (self *DynamicResource) Read(
 	req resource.ReadRequest,
 	resp *resource.ReadResponse,
 ) {
-	// Read Terraform prior state data into the model.
 	var state types.Object
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	timeoutsBlock := extractTimeoutsBlock(state.Attributes(), self.timeoutsType)
+	timeout := resolveTimeout(timeoutsBlock, "read", self.spec.Timeouts.Read)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
 	id := extractID(state, self.spec.IDField)
 	if id == "" {
@@ -125,7 +135,7 @@ func (self *DynamicResource) Read(
 		return
 	}
 
-	raw, found, err := self.client.Read(ctx, self.spec.ResolvedItemPath(id))
+	raw, found, err := self.client.Read(ctx, self.spec.ResolvedItemPath(id), timeout)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to read "+self.spec.SingularName,
@@ -137,8 +147,7 @@ func (self *DynamicResource) Read(
 		return
 	}
 
-	// Save updated resource into Terraform state.
-	newState, diags := jsonToObject(raw, self.spec.Fields, self.attrTypes)
+	newState, diags := self.buildStateWithTimeouts(raw, timeoutsBlock)
 	resp.Diagnostics.Append(diags...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, newState)...)
 }
@@ -149,7 +158,6 @@ func (self *DynamicResource) Update(
 	req resource.UpdateRequest,
 	resp *resource.UpdateResponse,
 ) {
-	// Read Terraform plan data into the model.
 	var plan types.Object
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
@@ -161,6 +169,11 @@ func (self *DynamicResource) Update(
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	timeoutsBlock := extractTimeoutsBlock(plan.Attributes(), self.timeoutsType)
+	timeout := resolveTimeout(timeoutsBlock, "update", self.spec.Timeouts.Update)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
 	id := extractID(state, self.spec.IDField)
 	if id == "" {
@@ -193,8 +206,7 @@ func (self *DynamicResource) Update(
 
 	tflog.Debug(ctx, fmt.Sprintf("Updated %s %s successfully", self.spec.SingularName, id))
 
-	// Save updated resource into Terraform state.
-	newState, diags := jsonToObject(raw, self.spec.Fields, self.attrTypes)
+	newState, diags := self.buildStateWithTimeouts(raw, timeoutsBlock)
 	resp.Diagnostics.Append(diags...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, newState)...)
 }
@@ -205,12 +217,17 @@ func (self *DynamicResource) Delete(
 	req resource.DeleteRequest,
 	resp *resource.DeleteResponse,
 ) {
-	// Read Terraform prior state data into the model.
 	var state types.Object
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
+
+	timeoutsBlock := extractTimeoutsBlock(state.Attributes(), self.timeoutsType)
+	deleteTimeout := resolveTimeout(timeoutsBlock, "delete", self.spec.Timeouts.Delete)
+	readTimeout := resolveTimeout(timeoutsBlock, "read", self.spec.Timeouts.Read)
+	ctx, cancel := context.WithTimeout(ctx, deleteTimeout)
+	defer cancel()
 
 	id := extractID(state, self.spec.IDField)
 	if id == "" {
@@ -220,7 +237,7 @@ func (self *DynamicResource) Delete(
 		return
 	}
 
-	if err := self.client.Delete(ctx, self.spec.ResolvedItemPath(id)); err != nil {
+	if err := self.client.Delete(ctx, self.spec.ResolvedItemPath(id), readTimeout); err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to delete "+self.spec.SingularName,
 			fmt.Sprintf("Unable to delete %s %s, got error: %s", self.spec.SingularName, id, err))
@@ -234,4 +251,67 @@ func (self *DynamicResource) ImportState(
 	resp *resource.ImportStateResponse,
 ) {
 	resource.ImportStatePassthroughID(ctx, path.Root(self.spec.IDField), req, resp)
+}
+
+// buildStateWithTimeouts builds a types.Object combining the API response fields and the
+// timeouts block so both are persisted to Terraform state.
+func (self *DynamicResource) buildStateWithTimeouts(
+	raw map[string]any,
+	timeoutsBlock types.Object,
+) (types.Object, diag.Diagnostics) {
+	resState, diags := jsonToObject(raw, self.spec.Fields, self.attrTypes)
+	if diags.HasError() {
+		return types.ObjectNull(nil), diags
+	}
+
+	allAttrTypes := make(map[string]attr.Type, len(self.attrTypes)+1)
+	for k, v := range self.attrTypes {
+		allAttrTypes[k] = v
+	}
+	allAttrTypes["timeouts"] = self.timeoutsType
+
+	allAttrs := make(map[string]attr.Value, len(resState.Attributes())+1)
+	for k, v := range resState.Attributes() {
+		allAttrs[k] = v
+	}
+	allAttrs["timeouts"] = timeoutsBlock
+
+	return types.ObjectValue(allAttrTypes, allAttrs)
+}
+
+// extractTimeoutsBlock retrieves the "timeouts" key from a plan/state attribute map as a
+// types.Object. Returns a null object (with correct type) when the block is absent.
+func extractTimeoutsBlock(attrs map[string]attr.Value, timeoutsType types.ObjectType) types.Object {
+	if v, ok := attrs["timeouts"]; ok {
+		if obj, ok := v.(types.Object); ok {
+			return obj
+		}
+	}
+	return types.ObjectNull(timeoutsType.AttrTypes)
+}
+
+// resolveTimeout returns the effective timeout for one operation.
+// Priority: user-configured value in the timeouts block > x-timeout spec default > 5m (Aria default).
+func resolveTimeout(block types.Object, op string, specDefault string) time.Duration {
+	const fallbackDur = 20 * time.Minute // Terraform's standard default resource timeout
+
+	base := fallbackDur
+	if specDefault != "" {
+		if d, err := time.ParseDuration(specDefault); err == nil && d > 0 {
+			base = d
+		}
+	}
+
+	if block.IsNull() || block.IsUnknown() {
+		return base
+	}
+
+	if v, ok := block.Attributes()[op]; ok {
+		if s, ok := v.(types.String); ok && !s.IsNull() && !s.IsUnknown() {
+			if d, err := time.ParseDuration(s.ValueString()); err == nil {
+				return d
+			}
+		}
+	}
+	return base
 }

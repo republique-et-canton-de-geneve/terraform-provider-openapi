@@ -28,6 +28,7 @@ type Client struct {
 }
 
 // NewClient creates a resty-backed Client configured with auth and TLS settings.
+// No global HTTP timeout is set; context deadlines are the sole enforcement mechanism.
 func NewClient(host, token string, insecure bool, okLevel, koLevel string) (*Client, error) {
 	if okLevel == "" {
 		okLevel = "TRACE"
@@ -38,7 +39,6 @@ func NewClient(host, token string, insecure bool, okLevel, koLevel string) (*Cli
 
 	rc := resty.New()
 	rc.SetBaseURL(host)
-	rc.SetTimeout(300 * time.Second)
 	rc.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: insecure}) //nolint:gosec
 	if token != "" {
 		rc.SetAuthToken(token)
@@ -61,7 +61,7 @@ func (self *Client) Create(
 	body map[string]any,
 ) (map[string]any, error) {
 	var result map[string]any
-	resp, err := self.resty.R().SetBody(body).SetResult(&result).Post(path)
+	resp, err := self.resty.R().SetContext(ctx).SetBody(body).SetResult(&result).Post(path)
 	if err = self.handle(ctx, resp, err, http.StatusCreated, http.StatusOK); err != nil {
 		return nil, fmt.Errorf("POST %s: %w", path, err)
 	}
@@ -69,9 +69,12 @@ func (self *Client) Create(
 }
 
 // Read GETs path and returns the decoded response. Returns found=false on 404.
-func (self *Client) Read(ctx context.Context, path string) (map[string]any, bool, error) {
+// readTimeout is applied as a per-call sub-context deadline (bounded by the parent ctx deadline).
+func (self *Client) Read(ctx context.Context, path string, readTimeout time.Duration) (map[string]any, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, readTimeout)
+	defer cancel()
 	var result map[string]any
-	resp, err := self.resty.R().SetResult(&result).Get(path)
+	resp, err := self.resty.R().SetContext(ctx).SetResult(&result).Get(path)
 	if err != nil {
 		return nil, false, fmt.Errorf("GET %s: %w", path, err)
 	}
@@ -92,7 +95,7 @@ func (self *Client) Update(
 	body map[string]any,
 ) (map[string]any, error) {
 	var result map[string]any
-	resp, err := self.resty.R().SetBody(body).SetResult(&result).Execute(method, path)
+	resp, err := self.resty.R().SetContext(ctx).SetBody(body).SetResult(&result).Execute(method, path)
 	if err = self.handle(ctx, resp, err, http.StatusOK); err != nil {
 		return nil, fmt.Errorf("%s %s: %w", method, path, err)
 	}
@@ -102,9 +105,12 @@ func (self *Client) Update(
 // List GETs the collection path and returns items as a slice of maps.
 // Handles both a direct JSON array response and an object wrapping an array in any of its top-level
 // keys (e.g. {"results": [...]} or {"items": [...]}).
-func (self *Client) List(ctx context.Context, path string) ([]map[string]any, error) {
+// readTimeout is applied as a per-call sub-context deadline (bounded by the parent ctx deadline).
+func (self *Client) List(ctx context.Context, path string, readTimeout time.Duration) ([]map[string]any, error) {
+	ctx, cancel := context.WithTimeout(ctx, readTimeout)
+	defer cancel()
 	var raw any
-	resp, err := self.resty.R().SetResult(&raw).Get(path)
+	resp, err := self.resty.R().SetContext(ctx).SetResult(&raw).Get(path)
 	if err = self.handle(ctx, resp, err, http.StatusOK); err != nil {
 		return nil, fmt.Errorf("GET %s: %w", path, err)
 	}
@@ -139,22 +145,38 @@ func extractList(v any) []map[string]any {
 }
 
 // Delete sends a DELETE request to path, retrying on 409 Conflict and polling until gone.
+// The outer ctx carries the delete operation deadline; readTimeout bounds each individual
+// polling GET so one hung request cannot exhaust the whole delete budget.
+// All sleeps respect context cancellation so the x-timeout deadline is honoured.
 // Copied/modified from aria provider internal/provider/utils_client_core.go DeleteIt().
-func (self *Client) Delete(ctx context.Context, path string) error {
+func (self *Client) Delete(ctx context.Context, path string, readTimeout time.Duration) error {
 	for attempt := 0; attempt <= conflictMaxAttempts; attempt++ {
-		resp, err := self.resty.R().Delete(path)
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("DELETE %s: %w", path, err)
+		}
+		resp, err := self.resty.R().SetContext(ctx).Delete(path)
 		if err = self.handle(ctx, resp, err, http.StatusNoContent, http.StatusOK); err != nil {
 			if attempt < conflictMaxAttempts && resp != nil &&
 				resp.StatusCode() == http.StatusConflict {
-				time.Sleep(3 * time.Second)
+				select {
+				case <-ctx.Done():
+					return fmt.Errorf("DELETE %s: %w", path, ctx.Err())
+				case <-time.After(3 * time.Second):
+				}
 				continue
 			}
 			return fmt.Errorf("DELETE %s: %w", path, err)
 		}
 
 		for retry := range []int{0, 1, 2, 3, 4} {
-			time.Sleep(time.Duration(retry) * time.Second)
-			_, found, err := self.Read(ctx, path)
+			if retry > 0 {
+				select {
+				case <-ctx.Done():
+					return fmt.Errorf("DELETE %s poll: %w", path, ctx.Err())
+				case <-time.After(time.Duration(retry) * time.Second):
+				}
+			}
+			_, found, err := self.Read(ctx, path, readTimeout)
 			if err != nil {
 				return fmt.Errorf("DELETE %s poll: %w", path, err)
 			}

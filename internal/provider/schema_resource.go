@@ -16,20 +16,65 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/republique-et-canton-de-geneve/terraform-provider-openapi/internal/spec"
 )
 
-// buildResourceSchema converts a slice of FieldSpecs to a Terraform schema and a parallel
-// attrTypes map used for state encoding/decoding.
-func buildResourceSchema(fields []*spec.FieldSpec) (schema.Schema, map[string]attr.Type) {
+// timeoutsAttrTypes is the fixed type map for the timeouts block attributes.
+var timeoutsAttrTypes = map[string]attr.Type{
+	"create": types.StringType,
+	"read":   types.StringType,
+	"update": types.StringType,
+	"delete": types.StringType,
+}
+
+// buildResourceSchema converts a slice of FieldSpecs to a Terraform schema, a parallel attrTypes
+// map used for resource-field state encoding, and the timeouts block object type.
+func buildResourceSchema(
+	fields []*spec.FieldSpec,
+	timeouts spec.ResourceTimeouts,
+) (schema.Schema, map[string]attr.Type, types.ObjectType) {
 	attributes := make(map[string]schema.Attribute, len(fields))
 	attrTypes := make(map[string]attr.Type, len(fields))
 	for _, f := range fields {
 		attributes[f.Name] = fieldToResourceSchemaAttr(f)
 		attrTypes[f.Name] = fieldToResourceAttrType(f)
 	}
-	return schema.Schema{Attributes: attributes}, attrTypes
+	timeoutsBlock := buildTimeoutsBlock(timeouts)
+	timeoutsType := types.ObjectType{AttrTypes: timeoutsAttrTypes}
+	return schema.Schema{
+		Attributes: attributes,
+		Blocks:     map[string]schema.Block{"timeouts": timeoutsBlock},
+	}, attrTypes, timeoutsType
+}
+
+// buildTimeoutsBlock returns a SingleNestedBlock for per-operation timeouts.
+// x-timeout values from the spec are surfaced in the attribute descriptions.
+func buildTimeoutsBlock(t spec.ResourceTimeouts) schema.Block {
+	timeoutAttr := func(op, specDefault string) schema.Attribute {
+		desc := "Timeout for the " + op + " operation (e.g. \"30m\", \"1h\")."
+		if specDefault != "" {
+			desc += " API spec default: " + specDefault + "."
+		} else {
+			desc += " Provider default: 20m."
+		}
+		return schema.StringAttribute{
+			MarkdownDescription: desc,
+			Optional:            true,
+			Validators:          []validator.String{positiveDuration{}},
+		}
+	}
+	return schema.SingleNestedBlock{
+		MarkdownDescription: "Configures per-operation timeouts. " +
+			"Overrides the `x-timeout` values from the API spec.",
+		Attributes: map[string]schema.Attribute{
+			"create": timeoutAttr("create", t.Create),
+			"read":   timeoutAttr("read", t.Read),
+			"update": timeoutAttr("update", t.Update),
+			"delete": timeoutAttr("delete", t.Delete),
+		},
+	}
 }
 
 // fieldToResourceSchemaAttr converts a FieldSpec to the appropriate Terraform schema attribute,
