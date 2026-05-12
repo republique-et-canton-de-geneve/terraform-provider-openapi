@@ -9,6 +9,29 @@ import (
 	yaml "go.yaml.in/yaml/v4"
 )
 
+// boolExtension reads a boolean OAS vendor extension from a schema.
+// Returns (true, true) for "true", (false, true) for "false".
+// Logs a warning and returns (false, false) when absent or any other value.
+func boolExtension(schema *base.Schema, key, desc string) (value bool, found bool) {
+	if schema == nil || schema.Extensions == nil {
+		return false, false
+	}
+	node, ok := schema.Extensions.Get(key)
+	if !ok || node == nil {
+		return false, false
+	}
+	switch node.Value {
+	case "true":
+		return true, true
+	case "false":
+		return false, true
+	default:
+		log.Printf("[WARN] %s: %s: %q is not supported; only true or false are recognised",
+			desc, key, node.Value)
+		return false, false
+	}
+}
+
 // toSnakeCase converts a camelCase or PascalCase string to snake_case.
 // "photoUrls" -> "photo_urls", "petId" -> "pet_id", "APIKey" -> "api_key".
 // Already-snake strings pass through unchanged.
@@ -101,13 +124,18 @@ func buildFieldSpec(
 ) *FieldSpec {
 	f := &FieldSpec{OASName: name, Name: toSnakeCase(name)}
 
-	// Type
+	// Fallback...
 	if schema == nil {
 		f.Type = "string"
 		f.Computed = !writable
 		return f
 	}
+
+	// Type
+
 	f.Type = detectType(schema)
+	f.Format = schema.Format
+
 	// Fields with no declared type and no structural hints accept any JSON value.
 	if f.Type == "string" && len(schema.Type) == 0 &&
 		len(schema.Enum) == 0 &&
@@ -115,59 +143,56 @@ func buildFieldSpec(
 		len(schema.OneOf) == 0 &&
 		len(schema.AnyOf) == 0 {
 		f.Type = "untyped"
+
 		// A default: in the OAS spec means the server initialises the field; mark Computed
 		// so the provider preserves the server-set value even when the decoded Go default is nil.
 		if schema.Default != nil {
 			f.Computed = true
 		}
 	}
-	f.Format = schema.Format
 
-	// Behaviour: Writable set first as Computed and Required derive from it
+	// Behaviour
+
+	// Writable set first as Computed and Required derive from it
 	f.Writable = writable
 	f.Required = required && writable
+	f.Sensitive = isSensitiveField(name, schema)
+
 	// readOnly: true means server-set; not writable regardless of POST body presence.
 	if schema.ReadOnly != nil && *schema.ReadOnly {
 		f.Computed = true
 		f.Writable = false
 	}
-	if schema.Extensions != nil {
-		node, ok := schema.Extensions.Get("x-immutable")
-		if ok && node != nil && node.Value == "true" {
-			f.Immutable = true
-		}
-	}
+
 	if !f.Writable && !writable {
 		f.Computed = true
 	}
-	if schema.Extensions != nil {
-		node, ok := schema.Extensions.Get("x-computed")
-		if ok && node != nil {
-			if node.Value == "true" {
-				f.Computed = true
-			} else {
-				log.Printf(
-					"[WARN] resource %q field %q: x-computed: %q is not supported; "+
-						"only x-computed: true is recognised",
-					resourceName, name, node.Value)
-			}
-		}
+
+	fieldDesc := resourceName + " field " + name
+	if v, found := boolExtension(schema, "x-computed", fieldDesc); found {
+		f.Computed = v
 	}
-	if schema.Extensions != nil {
-		node, ok := schema.Extensions.Get("x-unordered")
-		if ok && node != nil && node.Value == "true" {
-			f.Unordered = true
-		}
+	if v, found := boolExtension(schema, "x-immutable", fieldDesc); found {
+		f.Immutable = v
 	}
+	if v, found := boolExtension(schema, "x-unordered", fieldDesc); found {
+		f.Unordered = v
+	}
+
 	if f.Type == "array" && schema.UniqueItems != nil && *schema.UniqueItems {
 		f.UniqueItems = true
 	}
-	f.Sensitive = isSensitiveField(name, schema)
 
 	// Metadata
+
 	f.Description = schema.Description
 
-	// Validation constraints
+	// Miscellaneous
+
+	f.Default = decodeDefaultNode(schema.Default, f.Type)
+
+	// Validation
+
 	if schema.MaxLength != nil {
 		f.MaxLength = schema.MaxLength
 	}
@@ -184,7 +209,6 @@ func buildFieldSpec(
 		f.Maximum = schema.Maximum
 	}
 	f.Enum = extractEnumValues(schema)
-	f.Default = decodeDefaultNode(schema.Default, f.Type)
 
 	// Nested fields for objects
 	if f.Type == "object" && schema.Properties != nil {

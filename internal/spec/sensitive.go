@@ -27,15 +27,8 @@ var sensitiveKeywords = []string{
 // x-sensitive: false suppresses the name-heuristic (opt-out).
 // When absent, the lowercase field name is checked against sensitiveKeywords.
 func isSensitiveField(name string, schema *base.Schema) bool {
-	if schema != nil && schema.Extensions != nil {
-		if node, ok := schema.Extensions.Get("x-sensitive"); ok && node != nil {
-			if node.Value == "true" {
-				return true
-			}
-			if node.Value == "false" {
-				return false
-			}
-		}
+	if v, found := boolExtension(schema, "x-sensitive", "field "+name); found {
+		return v
 	}
 	lower := strings.ToLower(name)
 	for _, kw := range sensitiveKeywords {
