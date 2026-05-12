@@ -82,6 +82,39 @@ The provider merges all values from both schemas into a single `OneOf` validator
 accepted alongside the named values.
 
 
+## Array constraints
+
+| OAS3 keyword | Terraform validator | Example |
+|---|---|---|
+| `uniqueItems: true` (without `x-unordered`) | `UniqueItems` | see below |
+
+When `uniqueItems: true` is present on an array field and
+[`x-unordered`](../architecture/extensions/implemented/x-unordered.md) is absent, the provider keeps
+the field as an ordered Terraform **list** and attaches a validator that rejects plans where the
+same element appears more than once.
+
+```yaml
+roles:
+  type: array
+  items:
+    type: string
+  uniqueItems: true
+```
+
+Terraform plan when the config contains a duplicate:
+
+```
+Error: Duplicate list element
+  Element "admin" appears more than once (uniqueItems: true).
+```
+
+When `x-unordered: true` is also set, the field becomes a Terraform **set** instead. Sets are
+inherently unique and no separate validator is needed.
+
+See [x-unordered](../architecture/extensions/implemented/x-unordered.md) for the full combination
+matrix.
+
+
 ## Read-only fields
 
 Validators are extracted from the schema regardless of whether a field is read-only.
