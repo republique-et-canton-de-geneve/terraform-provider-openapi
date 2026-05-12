@@ -83,6 +83,7 @@ debug tips.
 | `default:` | `Optional + Computed` with a static default; see [defaults.md](guides/defaults.md) |
 | no declared `type:` | `jsontypes.Normalized` string or startup error; see [typing.md](guides/typing.md) |
 | `x-computed: true` | `Computed: true`; plan shows `(known after apply)` on every write |
+| `x-unordered: true` | API may return items in any order; combined with `uniqueItems` drives Set vs sorted-List (see [x-unordered.md](architecture/extensions/implemented/x-unordered.md)) |
 | `x-immutable: true` | Stable after creation: prior value preserved in plan, changing forces replace |
 | `x-sensitive: true` | Value redacted in plan and state |
 | `x-sensitive: false` | Opt out of auto-sensitive detection (e.g. `num_tokens` contains `token` but is not a secret) |
@@ -125,13 +126,17 @@ for the full specification.
 | Extension | Scope | Description |
 |---|---|---|
 | `x-computed` | field | Server sets or updates this field independently of user input |
+| `x-unordered` | field | API may return items in any order; combined with `uniqueItems` drives Set vs sorted-List |
 | `x-immutable` | field | Stable after creation: prior value kept in plan, change forces replace |
 | `x-sensitive` | field | Field value is redacted in plan and state |
 | `x-timeout` | operation | Default timeout for the corresponding Terraform action (list/create/read/update/delete) |
 
 Full extension documentation, naming rationale, and the planned roadmap extensions
-(`x-ignore-order`, `x-primary-key`, `x-tf-status`, …) are in
+(`x-primary-key`, `x-tf-status`, …) are in
 [architecture/extensions/index.md](architecture/extensions/index.md).
+
+`uniqueItems: true` on an array (standard OAS keyword, no extension needed) adds a
+uniqueness validator to the list; combined with `x-unordered: true` it selects a Set instead.
 
 
 ## Example: create-only resource (no update)

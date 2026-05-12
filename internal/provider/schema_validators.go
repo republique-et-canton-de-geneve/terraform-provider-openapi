@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"regexp"
 	"time"
@@ -52,6 +53,36 @@ func (positiveDuration) ValidateString(_ context.Context, req validator.StringRe
 	}
 	if d <= 0 {
 		resp.Diagnostics.AddAttributeError(req.Path, "Invalid duration", "timeout must be greater than zero")
+	}
+}
+
+// uniqueListValidator rejects plans where the same element appears more than once.
+// Applied to arrays with uniqueItems: true but without x-unordered (those use a Set instead).
+type uniqueListValidator struct{}
+
+func (uniqueListValidator) Description(_ context.Context) string {
+	return "elements must be unique (uniqueItems: true)"
+}
+
+func (uniqueListValidator) MarkdownDescription(ctx context.Context) string {
+	return uniqueListValidator{}.Description(ctx)
+}
+
+func (uniqueListValidator) ValidateList(_ context.Context, req validator.ListRequest, resp *validator.ListResponse) {
+	if req.ConfigValue.IsNull() || req.ConfigValue.IsUnknown() {
+		return
+	}
+	seen := map[string]bool{}
+	for _, e := range req.ConfigValue.Elements() {
+		key := fmt.Sprint(e)
+		if seen[key] {
+			resp.Diagnostics.AddAttributeError(
+				req.Path,
+				"Duplicate list element",
+				fmt.Sprintf("Element %s appears more than once (uniqueItems: true).", key))
+			return
+		}
+		seen[key] = true
 	}
 }
 

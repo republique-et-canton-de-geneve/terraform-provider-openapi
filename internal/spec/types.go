@@ -19,11 +19,13 @@ type FieldSpec struct {
 
 	// Behaviour
 
-	Computed  bool // readOnly: true OR not in write body
-	Immutable bool // x-immutable: true triggers RequiresReplace
-	Required  bool // required in OAS schema and writable
-	Sensitive bool // x-sensitive: true
-	Writable  bool // present in POST request body
+	Computed    bool // readOnly: true OR not in write body
+	Immutable   bool // x-immutable: true triggers RequiresReplace
+	Required    bool // required in OAS schema and writable
+	Sensitive   bool // x-sensitive: true
+	Unordered   bool // x-unordered: true; API may return items in any order
+	UniqueItems bool // uniqueItems: true; elements must be distinct
+	Writable    bool // present in POST request body
 
 	// Metadata
 
@@ -50,7 +52,8 @@ type FieldSpec struct {
 
 // ResourceTimeouts holds the x-timeout defaults for each CRUD operation.
 type ResourceTimeouts struct {
-	List   string // collection GET (data source); duration string, e.g. "2m"; empty means use provider default
+	// duration string, e.g. "2m"; empty means use provider default
+	List   string // collection GET (data source)
 	Create string
 	Read   string
 	Update string

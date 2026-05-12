@@ -9,7 +9,7 @@ fine-grained control over how fields and resources and workflows are exposed in 
 See [ADR 0006](../decisions/0006-extension-naming-bare-vs-x-tf.md) for the full decision record.
 In summary, extensions fall into two categories:
 
-* **Bare names** (`x-immutable`, `x-sensitive`, `x-computed`, `x-ignore-order`, `x-primary-key`,
+* **Bare names** (`x-immutable`, `x-sensitive`, `x-computed`, `x-unordered`, `x-primary-key`,
   `x-timeout`): semantics that are API-intrinsic and tool-agnostic. These names have community
   convergence (ReDoc, open OAS issues, or no prior conflicting usage) and are meaningful to any
   consumer of the spec, not just Terraform.
@@ -31,7 +31,8 @@ In summary, extensions fall into two categories:
 | Recommended default timeout per resource action | [`x-timeout`](implemented/x-timeout.md) | operation | implemented | — | — |
 | Optional field whose default is set by the server | [`x-computed`](implemented/x-computed.md) | field | implemented | `x-terraform-computed` | — |
 | Field cannot be changed after creation | [`x-immutable`](implemented/x-immutable.md) | field | implemented | `x-terraform-immutable`, `x-terraform-force-new` | 640+ usages · ReDoc · OAS [#2720] · Azure `x-ms-mutability: ["create"]` |
-| Array field where item order is insignificant | [`x-ignore-order`](planned/x-ignore-order.md) | field | planned | `x-terraform-ignore-order` | — |
+| Array field where ordering is insignificant | [`x-unordered`](implemented/x-unordered.md) | field | implemented | `x-terraform-ignore-order` | — |
+| Array field whose elements must be distinct (standard OAS keyword, not an extension) | `uniqueItems: true`, see [`x-unordered`](implemented/x-unordered.md) | field | implemented | — | OAS3 / JSON Schema |
 | Field value is redacted in plan and state | [`x-sensitive`](implemented/x-sensitive.md) | field | implemented | `x-terraform-sensitive` | No prior art found; name heuristics widely used instead |
 | Refresh token exchange flow | [`x-terraform-refresh-token-url`](undecided/x-terraform-refresh-token-url.md) | security | undecided | `x-terraform-refresh-token-url` | — |
 | ~~Bearer token formatting~~ | [`x-terraform-authentication-scheme-bearer`](rejected/x-terraform-authentication-scheme-bearer.md) | security | rejected | `x-terraform-authentication-scheme-bearer` | OAS3 `http/bearer` scheme is the standard |

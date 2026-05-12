@@ -12,7 +12,7 @@ knows the server will fill the value in if the user omits it from their configur
 | `integer` | `int64` | `int64default.StaticInt64` |
 | `number` | `float64` | `float64default.StaticFloat64` |
 | `boolean` | `bool` | `booldefault.StaticBool` |
-| `array` (empty `[]`) | `[]any{}` | `listdefault.StaticValue` (empty list) |
+| `array` (empty `[]`) | `[]any{}` | `listdefault.StaticValue` (empty list); `setdefault.StaticValue` when `x-unordered: true` + `uniqueItems: true` |
 
 ```yaml
 disk_d_size:

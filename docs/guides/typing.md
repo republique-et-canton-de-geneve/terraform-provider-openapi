@@ -14,7 +14,7 @@ follow the same rules recursively.
 | `number` | `Float64Attribute` |
 | `boolean` | `BoolAttribute` |
 | `object` (with `properties:`) | `SingleNestedAttribute` |
-| `array` (with `items:`) | `ListAttribute` / `ListNestedAttribute` |
+| `array` (with `items:`) | `ListAttribute` / `ListNestedAttribute`; `SetAttribute` / `SetNestedAttribute` when `x-unordered: true` + `uniqueItems: true` |
 
 Structural cues take precedence over the declared `type`: a schema with an `items:` key is treated
 as an array even if `type: object` is also present, and a schema with a `properties:` key is

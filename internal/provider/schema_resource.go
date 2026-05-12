@@ -1,7 +1,10 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
+	"sort"
 
 	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -14,12 +17,34 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/republique-et-canton-de-geneve/terraform-provider-openapi/internal/spec"
 )
+
+// sortListModifier sorts list elements at plan time so that config order never differs
+// from the sorted state written by Read, preventing spurious diffs on x-unordered fields.
+type sortListModifier struct{}
+
+func (sortListModifier) Description(_ context.Context) string         { return "sorts list elements" }
+func (sortListModifier) MarkdownDescription(_ context.Context) string { return "sorts list elements" }
+
+func (sortListModifier) PlanModifyList(_ context.Context,
+	req planmodifier.ListRequest, resp *planmodifier.ListResponse) {
+	if req.PlanValue.IsNull() || req.PlanValue.IsUnknown() {
+		return
+	}
+	elems := req.PlanValue.Elements()
+	sort.Slice(elems, func(i, j int) bool {
+		return fmt.Sprint(elems[i]) < fmt.Sprint(elems[j])
+	})
+	sorted, diags := types.ListValue(req.PlanValue.ElementType(context.Background()), elems)
+	resp.Diagnostics.Append(diags...)
+	resp.PlanValue = sorted
+}
 
 // timeoutsAttrTypes is the fixed type map for the timeouts block attributes.
 var timeoutsAttrTypes = map[string]attr.Type{
@@ -99,6 +124,7 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 
 	switch f.Type {
 	case "integer":
+		// Int64; supports min/max validators and immutability.
 		planMods := []planmodifier.Int64{}
 		if f.Immutable {
 			planMods = append(planMods, int64planmodifier.UseNonNullStateForUnknown())
@@ -119,6 +145,7 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		}
 		return a
 	case "number":
+		// Float64; no validators beyond immutability.
 		planMods := []planmodifier.Float64{}
 		if f.Immutable {
 			planMods = append(planMods, float64planmodifier.UseNonNullStateForUnknown())
@@ -138,6 +165,7 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		}
 		return a
 	case "boolean":
+		// Bool; no validators beyond immutability.
 		planMods := []planmodifier.Bool{}
 		if f.Immutable {
 			planMods = append(planMods, boolplanmodifier.UseNonNullStateForUnknown())
@@ -157,6 +185,7 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		}
 		return a
 	case "untyped":
+		// No declared OAS type: stored as jsontypes.Normalized (JSON string).
 		planMods := []planmodifier.String{}
 		if f.Immutable {
 			planMods = append(planMods, stringplanmodifier.UseNonNullStateForUnknown())
@@ -177,6 +206,7 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 		}
 		return a
 	case "object":
+		// Single nested object; child fields recurse into this function.
 		nestedAttrs := make(map[string]schema.Attribute, len(f.Nested))
 		for _, nf := range f.Nested {
 			nestedAttrs[nf.Name] = fieldToResourceSchemaAttr(nf)
@@ -189,6 +219,58 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 			Attributes:          nestedAttrs,
 		}
 	case "array":
+		// Four cases driven by x-unordered and uniqueItems:
+		//   x-unordered + uniqueItems → Set (unordered, enforces uniqueness)
+		//   x-unordered only          → sorted List (sort on read + plan modifier)
+		//   uniqueItems only          → List + uniqueness validator
+		//   neither                   → plain List
+		unordered := f.Unordered
+		unique := f.UniqueItems
+
+		if unordered && unique {
+			// Set: framework enforces uniqueness and order is irrelevant.
+			if f.ItemSpec != nil && f.ItemSpec.Type == "object" {
+				nestedAttrs := make(map[string]schema.Attribute, len(f.ItemSpec.Nested))
+				for _, nf := range f.ItemSpec.Nested {
+					nestedAttrs[nf.Name] = fieldToResourceSchemaAttr(nf)
+				}
+				return schema.SetNestedAttribute{
+					MarkdownDescription: f.Description,
+					Required:            required,
+					Optional:            optional,
+					Computed:            computed,
+					NestedObject:        schema.NestedAttributeObject{Attributes: nestedAttrs},
+				}
+			}
+			elemType := attr.Type(types.StringType)
+			if f.ItemSpec != nil {
+				elemType = fieldToResourceAttrType(f.ItemSpec)
+			}
+			a := schema.SetAttribute{
+				MarkdownDescription: f.Description,
+				Required:            required,
+				Optional:            optional,
+				Computed:            computed,
+				ElementType:         elemType,
+			}
+			if hasDefault {
+				if _, ok := f.Default.([]any); ok {
+					a.Default = setdefault.StaticValue(types.SetValueMust(elemType, []attr.Value{}))
+				}
+			}
+			return a
+		}
+
+		// All remaining cases use List; build nested attrs or elem type first.
+		var listValidators []validator.List
+		var listPlanMods []planmodifier.List
+		if unordered {
+			listPlanMods = append(listPlanMods, sortListModifier{})
+		}
+		if unique {
+			listValidators = append(listValidators, uniqueListValidator{})
+		}
+
 		if f.ItemSpec != nil && f.ItemSpec.Type == "object" {
 			nestedAttrs := make(map[string]schema.Attribute, len(f.ItemSpec.Nested))
 			for _, nf := range f.ItemSpec.Nested {
@@ -199,9 +281,9 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 				Required:            required,
 				Optional:            optional,
 				Computed:            computed,
-				NestedObject: schema.NestedAttributeObject{
-					Attributes: nestedAttrs,
-				},
+				PlanModifiers:       listPlanMods,
+				Validators:          listValidators,
+				NestedObject:        schema.NestedAttributeObject{Attributes: nestedAttrs},
 			}
 		}
 		elemType := attr.Type(types.StringType)
@@ -214,6 +296,8 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 			Optional:            optional,
 			Computed:            computed,
 			ElementType:         elemType,
+			PlanModifiers:       listPlanMods,
+			Validators:          listValidators,
 		}
 		if hasDefault {
 			if _, ok := f.Default.([]any); ok {
@@ -221,7 +305,8 @@ func fieldToResourceSchemaAttr(f *spec.FieldSpec) schema.Attribute {
 			}
 		}
 		return a
-	default: // string + fallback
+	default:
+		// String (and unrecognised types fall back to string).
 		planMods := []planmodifier.String{}
 		if f.Immutable {
 			planMods = append(planMods, stringplanmodifier.UseNonNullStateForUnknown())

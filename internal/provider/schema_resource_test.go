@@ -504,3 +504,135 @@ func TestFieldToResourceAttrType_array_no_itemspec(t *testing.T) {
 		t.Fatalf("default elem type should be StringType, got %v", listType.ElemType)
 	}
 }
+
+// --- x-unordered / uniqueItems -------------------------------------------------------------------
+
+func TestFieldToResourceSchemaAttr_array_unordered_unique_strings(t *testing.T) {
+	// x-unordered + uniqueItems → Set
+	f := &spec.FieldSpec{
+		Name:        "groups",
+		Type:        "array",
+		Writable:    true,
+		Unordered:   true,
+		UniqueItems: true,
+		ItemSpec:    &spec.FieldSpec{Name: "", Type: "string"},
+	}
+	got := fieldToResourceSchemaAttr(f)
+	attr, ok := got.(schema.SetAttribute)
+	if !ok {
+		t.Fatalf("expected SetAttribute for x-unordered+uniqueItems array, got %T", got)
+	}
+	if attr.ElementType != types.StringType {
+		t.Fatalf("elem type: got %v", attr.ElementType)
+	}
+}
+
+func TestFieldToResourceSchemaAttr_array_unordered_unique_objects(t *testing.T) {
+	// x-unordered + uniqueItems → SetNestedAttribute
+	f := &spec.FieldSpec{
+		Name:        "entries",
+		Type:        "array",
+		Writable:    true,
+		Unordered:   true,
+		UniqueItems: true,
+		ItemSpec: &spec.FieldSpec{
+			Name: "",
+			Type: "object",
+			Nested: []*spec.FieldSpec{
+				{Name: "id", Type: "integer", Writable: true},
+			},
+		},
+	}
+	got := fieldToResourceSchemaAttr(f)
+	attr, ok := got.(schema.SetNestedAttribute)
+	if !ok {
+		t.Fatalf("expected SetNestedAttribute for x-unordered+uniqueItems objects, got %T", got)
+	}
+	if _, ok := attr.NestedObject.Attributes["id"]; !ok {
+		t.Fatal("expected nested id attribute")
+	}
+}
+
+func TestFieldToResourceSchemaAttr_array_unordered_nonunique(t *testing.T) {
+	// x-unordered only → sorted List with sortListModifier
+	f := &spec.FieldSpec{
+		Name:      "groups",
+		Type:      "array",
+		Writable:  true,
+		Unordered: true,
+		ItemSpec:  &spec.FieldSpec{Name: "", Type: "string"},
+	}
+	got := fieldToResourceSchemaAttr(f)
+	attr, ok := got.(schema.ListAttribute)
+	if !ok {
+		t.Fatalf("expected ListAttribute for x-unordered (non-unique) array, got %T", got)
+	}
+	if attr.ElementType != types.StringType {
+		t.Fatalf("elem type: got %v", attr.ElementType)
+	}
+	if len(attr.PlanModifiers) != 1 {
+		t.Fatalf("expected 1 plan modifier (sortListModifier), got %d", len(attr.PlanModifiers))
+	}
+	if len(attr.Validators) != 0 {
+		t.Fatalf("expected no validators for non-unique array, got %d", len(attr.Validators))
+	}
+}
+
+func TestFieldToResourceSchemaAttr_array_unique_ordered(t *testing.T) {
+	// uniqueItems only → List with uniqueListValidator
+	f := &spec.FieldSpec{
+		Name:        "tags",
+		Type:        "array",
+		Writable:    true,
+		UniqueItems: true,
+		ItemSpec:    &spec.FieldSpec{Name: "", Type: "string"},
+	}
+	got := fieldToResourceSchemaAttr(f)
+	attr, ok := got.(schema.ListAttribute)
+	if !ok {
+		t.Fatalf("expected ListAttribute for uniqueItems-only array, got %T", got)
+	}
+	if len(attr.PlanModifiers) != 0 {
+		t.Fatalf("expected no plan modifiers for ordered array, got %d", len(attr.PlanModifiers))
+	}
+	if len(attr.Validators) != 1 {
+		t.Fatalf("expected 1 validator (uniqueListValidator), got %d", len(attr.Validators))
+	}
+}
+
+func TestFieldToResourceAttrType_array_unordered_unique(t *testing.T) {
+	// x-unordered + uniqueItems → SetType
+	f := &spec.FieldSpec{
+		Name:        "groups",
+		Type:        "array",
+		Unordered:   true,
+		UniqueItems: true,
+		ItemSpec:    &spec.FieldSpec{Name: "", Type: "string"},
+	}
+	got := fieldToResourceAttrType(f)
+	setType, ok := got.(types.SetType)
+	if !ok {
+		t.Fatalf("expected SetType for x-unordered+uniqueItems array, got %T", got)
+	}
+	if setType.ElemType != types.StringType {
+		t.Fatalf("elem type: got %v", setType.ElemType)
+	}
+}
+
+func TestFieldToResourceAttrType_array_unordered_nonunique(t *testing.T) {
+	// x-unordered only → ListType
+	f := &spec.FieldSpec{
+		Name:      "groups",
+		Type:      "array",
+		Unordered: true,
+		ItemSpec:  &spec.FieldSpec{Name: "", Type: "string"},
+	}
+	got := fieldToResourceAttrType(f)
+	listType, ok := got.(types.ListType)
+	if !ok {
+		t.Fatalf("expected ListType for x-unordered (non-unique) array, got %T", got)
+	}
+	if listType.ElemType != types.StringType {
+		t.Fatalf("elem type: got %v", listType.ElemType)
+	}
+}

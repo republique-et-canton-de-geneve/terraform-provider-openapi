@@ -396,6 +396,98 @@ func TestAttrMapToJSON_excludes_keys_not_in_fields(t *testing.T) {
 	}
 }
 
+// --- x-unordered / uniqueItems: Set and sorted-List support --------------------------------------
+
+func TestAttrToJSON_set(t *testing.T) {
+	// Set (x-unordered + uniqueItems) serialises to []any.
+	set, _ := types.SetValue(types.StringType, []attr.Value{
+		types.StringValue("a"),
+		types.StringValue("b"),
+	})
+	got, ok := attrToJSON(set).([]any)
+	if !ok {
+		t.Fatal("expected []any for Set")
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 elements, got %d", len(got))
+	}
+}
+
+func TestJsonToAttr_set_strings(t *testing.T) {
+	// Set type (x-unordered + uniqueItems path).
+	setType := types.SetType{ElemType: types.StringType}
+	got := jsonToAttr([]any{"x", "y"}, setType)
+	set, ok := got.(types.Set)
+	if !ok || set.IsNull() {
+		t.Fatalf("expected non-null Set, got %T", got)
+	}
+	if len(set.Elements()) != 2 {
+		t.Fatalf("expected 2 elements, got %d", len(set.Elements()))
+	}
+}
+
+func TestJsonToAttr_set_nil(t *testing.T) {
+	setType := types.SetType{ElemType: types.StringType}
+	got := jsonToAttr(nil, setType)
+	set, ok := got.(types.Set)
+	if !ok || set.IsNull() {
+		t.Fatal("expected empty (not null) Set for nil input")
+	}
+	if len(set.Elements()) != 0 {
+		t.Fatalf("expected empty Set, got %v", set.Elements())
+	}
+}
+
+func TestJsonToAttrField_set_unordered_unique(t *testing.T) {
+	// x-unordered + uniqueItems → SetType; elements stored as-is by the Set.
+	setType := types.SetType{ElemType: types.StringType}
+	f := &spec.FieldSpec{
+		Name:        "groups",
+		Type:        "array",
+		Unordered:   true,
+		UniqueItems: true,
+		ItemSpec:    &spec.FieldSpec{Name: "", Type: "string"},
+	}
+	got := jsonToAttrField([]any{"b", "a"}, setType, f)
+	set, ok := got.(types.Set)
+	if !ok || set.IsNull() {
+		t.Fatalf("expected non-null Set, got %T", got)
+	}
+	if len(set.Elements()) != 2 {
+		t.Fatalf("expected 2 elements, got %d", len(set.Elements()))
+	}
+}
+
+func TestJsonToAttrField_list_sorted(t *testing.T) {
+	// x-unordered without uniqueItems → sorted List regardless of API order.
+	listType := types.ListType{ElemType: types.StringType}
+	f := &spec.FieldSpec{
+		Name:      "groups",
+		Type:      "array",
+		Unordered: true,
+		ItemSpec:  &spec.FieldSpec{Name: "", Type: "string"},
+	}
+	got := jsonToAttrField([]any{"ops", "dev", "admin"}, listType, f)
+	list, ok := got.(types.List)
+	if !ok || list.IsNull() {
+		t.Fatalf("expected non-null List, got %T", got)
+	}
+	elems := list.Elements()
+	if len(elems) != 3 {
+		t.Fatalf("expected 3 elements, got %d", len(elems))
+	}
+	want := []string{"admin", "dev", "ops"}
+	for i, e := range elems {
+		s, ok := e.(types.String)
+		if !ok {
+			t.Fatalf("elem[%d]: expected types.String, got %T", i, e)
+		}
+		if s.ValueString() != want[i] {
+			t.Errorf("elem[%d]: got %q, want %q", i, s.ValueString(), want[i])
+		}
+	}
+}
+
 func TestAttrMapToJSON_camelCase_name_mapping(t *testing.T) {
 	// Terraform plan uses snake_case; JSON body sent to API must use camelCase.
 	fields := []*spec.FieldSpec{

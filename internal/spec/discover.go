@@ -112,7 +112,7 @@ func buildResourceSpec(name string, listInfo, itemInfo *pathInfo) *ResourceSpec 
 	if listInfo != nil && listInfo.item.Post != nil {
 		writeFields = extractRequestBodyFields(listInfo.item.Post)
 	}
-	rs.Fields = buildFieldSpecs(name, itemSchema, writeFields)
+	rs.Fields = buildFieldSpecs(itemSchema, name, writeFields)
 
 	rs.IDField = "id"
 

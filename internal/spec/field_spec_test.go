@@ -1,28 +1,109 @@
 package spec
 
-import "testing"
+import (
+	"testing"
 
-// --- toSnakeCase ---------------------------------------------------------------------------------
+	"github.com/pb33f/libopenapi/datamodel/high/base"
+	yaml "go.yaml.in/yaml/v4"
+)
 
-func TestToSnakeCase(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"photoUrls", "photo_urls"},
-		{"petId", "pet_id"},
-		{"shipDate", "ship_date"},
-		{"firstName", "first_name"},
-		{"APIKey", "api_key"},
-		{"userStatus", "user_status"},
-		{"id", "id"},
-		{"name", "name"},
-		{"created_at", "created_at"}, // already snake_case
-		{"status", "status"},
+// --- buildFieldSpecs -----------------------------------------------------------------------------
+
+func TestBuildFieldSpecs(t *testing.T) {
+	model := mustParseFixture(t, "schema_components.yaml")
+	proxy, ok := model.Model.Components.Schemas.Get("Resource")
+	if !ok {
+		t.Fatal("Resource schema not found in test spec")
 	}
-	for _, c := range cases {
-		t.Run(c.in, func(t *testing.T) {
-			if got := toSnakeCase(c.in); got != c.want {
-				t.Errorf("toSnakeCase(%q) = %q, want %q", c.in, got, c.want)
-			}
-		})
+
+	writeFields := map[string]bool{"name": true, "size": true}
+	byName := fieldsByName(buildFieldSpecs(proxy.Schema(), "res", writeFields))
+
+	// id: not in write body -> Computed derived from OAS (not writable); IsID set by buildFieldSpecs
+	id := byName["id"]
+	if id == nil {
+		t.Fatal("id field missing")
+	}
+	if !id.IsID {
+		t.Error("id.IsID should be true")
+	}
+	if !id.Computed {
+		t.Error("id.Computed should be true (id not in write body)")
+	}
+	if id.Writable {
+		t.Error("id.Writable should be false (id not in write body)")
+	}
+	if id.Required {
+		t.Error("id.Required should be false (required && writable = false)")
+	}
+
+	// name: in write body and in schema required
+	name := byName["name"]
+	if name == nil {
+		t.Fatal("name field missing")
+	}
+	if !name.Writable {
+		t.Error("name.Writable should be true")
+	}
+	if !name.Required {
+		t.Error("name.Required should be true")
+	}
+	if name.Computed {
+		t.Error("name.Computed should be false")
+	}
+
+	// size: in write body, not required
+	size := byName["size"]
+	if size == nil {
+		t.Fatal("size field missing")
+	}
+	if !size.Writable {
+		t.Error("size.Writable should be true")
+	}
+	if size.Required {
+		t.Error("size.Required should be false")
+	}
+	if size.Computed {
+		t.Error("size.Computed should be false")
+	}
+
+	// status: readOnly in spec — computed regardless of write body
+	status := byName["status"]
+	if status == nil {
+		t.Fatal("status field missing")
+	}
+	if !status.Computed {
+		t.Error("status.Computed should be true")
+	}
+	if status.Writable {
+		t.Error("status.Writable should be false")
+	}
+}
+
+func TestBuildFieldSpecs_ClientSideID(t *testing.T) {
+	// When id is present in the POST body (not readOnly), it must be writable, the
+	// client supplies it. buildFieldSpecs must not force Computed=true in that case.
+	model := mustParseFixture(t, "schema_components.yaml")
+	proxy, ok := model.Model.Components.Schemas.Get("Resource")
+	if !ok {
+		t.Fatal("Resource schema not found in test spec")
+	}
+
+	writeFields := map[string]bool{"id": true, "name": true, "size": true}
+	byName := fieldsByName(buildFieldSpecs(proxy.Schema(), "res", writeFields))
+
+	id := byName["id"]
+	if id == nil {
+		t.Fatal("id field missing")
+	}
+	if !id.IsID {
+		t.Error("id.IsID should be true")
+	}
+	if !id.Writable {
+		t.Error("id.Writable should be true when id is in POST body")
+	}
+	if id.Computed {
+		t.Error("id.Computed should be false when id is in POST body (client-supplied)")
 	}
 }
 
@@ -42,7 +123,7 @@ func TestBuildFieldSpec_NilSchema(t *testing.T) {
 			name = "writable"
 		}
 		t.Run(name, func(t *testing.T) {
-			got := buildFieldSpec("res", "field", nil, tt.writable, false)
+			got := buildFieldSpec(nil, "res", "field", false, tt.writable)
 			if got.Type != "string" {
 				t.Errorf("Type = %q, want %q", got.Type, "string")
 			}
@@ -57,20 +138,22 @@ func TestBuildFieldSpec(t *testing.T) {
 	model := mustParseFixture(t, "schema_components.yaml")
 
 	tests := []struct {
-		name          string
-		schemaName    string
-		fieldName     string
-		writable      bool
-		required      bool
-		wantType      string
-		wantComputed  bool
-		wantWritable  bool
-		wantRequired  bool
-		wantImmutable bool
-		wantSensitive bool
-		wantDesc      string
-		wantNestedLen int
-		wantItemType  string
+		name            string
+		schemaName      string
+		fieldName       string
+		writable        bool
+		required        bool
+		wantType        string
+		wantComputed    bool
+		wantWritable    bool
+		wantRequired    bool
+		wantImmutable   bool
+		wantUnordered   bool
+		wantUniqueItems bool
+		wantSensitive   bool
+		wantDesc        string
+		wantNestedLen   int
+		wantItemType    string
 	}{
 		{
 			name:       "writable required string",
@@ -151,6 +234,43 @@ func TestBuildFieldSpec(t *testing.T) {
 			writable: true,
 			wantType: "array", wantWritable: true, wantItemType: "object",
 		},
+		{
+			name:       "x-unordered on array of strings",
+			schemaName: "ArrayStringUnordered", fieldName: "groups",
+			writable:      true,
+			wantType:      "array",
+			wantWritable:  true,
+			wantItemType:  "string",
+			wantUnordered: true,
+		},
+		{
+			name:       "x-unordered on array of objects",
+			schemaName: "ArrayObjectUnordered", fieldName: "entries",
+			writable:      true,
+			wantType:      "array",
+			wantWritable:  true,
+			wantItemType:  "object",
+			wantUnordered: true,
+		},
+		{
+			name:       "uniqueItems on array of strings",
+			schemaName: "ArrayStringUniqueItems", fieldName: "tags",
+			writable:        true,
+			wantType:        "array",
+			wantWritable:    true,
+			wantItemType:    "string",
+			wantUniqueItems: true,
+		},
+		{
+			name:       "x-unordered + uniqueItems",
+			schemaName: "ArrayStringUnorderedUniqueItems", fieldName: "groups",
+			writable:        true,
+			wantType:        "array",
+			wantWritable:    true,
+			wantItemType:    "string",
+			wantUnordered:   true,
+			wantUniqueItems: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -159,7 +279,7 @@ func TestBuildFieldSpec(t *testing.T) {
 			if !ok {
 				t.Fatalf("schema %q not found in test spec", tt.schemaName)
 			}
-			got := buildFieldSpec("res", tt.fieldName, proxy.Schema(), tt.writable, tt.required)
+			got := buildFieldSpec(proxy.Schema(), "res", tt.fieldName, tt.required, tt.writable)
 
 			if got.Type != tt.wantType {
 				t.Errorf("Type = %q, want %q", got.Type, tt.wantType)
@@ -175,6 +295,12 @@ func TestBuildFieldSpec(t *testing.T) {
 			}
 			if got.Immutable != tt.wantImmutable {
 				t.Errorf("Immutable = %v, want %v", got.Immutable, tt.wantImmutable)
+			}
+			if got.Unordered != tt.wantUnordered {
+				t.Errorf("Unordered = %v, want %v", got.Unordered, tt.wantUnordered)
+			}
+			if got.UniqueItems != tt.wantUniqueItems {
+				t.Errorf("UniqueItems = %v, want %v", got.UniqueItems, tt.wantUniqueItems)
 			}
 			if got.Sensitive != tt.wantSensitive {
 				t.Errorf("Sensitive = %v, want %v", got.Sensitive, tt.wantSensitive)
@@ -207,7 +333,7 @@ func TestBuildFieldSpec_Validation(t *testing.T) {
 		if !ok {
 			t.Fatalf("schema %q not found", name)
 		}
-		return buildFieldSpec("res", "field", proxy.Schema(), true, false)
+		return buildFieldSpec(proxy.Schema(), "res", "field", false, true)
 	}
 
 	t.Run("maxLength", func(t *testing.T) {
@@ -302,7 +428,7 @@ func TestBuildFieldSpec_Default(t *testing.T) {
 		if !ok {
 			t.Fatalf("schema %q not found", schemaName)
 		}
-		return buildFieldSpec("res", "field", proxy.Schema(), true, false)
+		return buildFieldSpec(proxy.Schema(), "res", "field", false, true)
 	}
 
 	t.Run("string default", func(t *testing.T) {
@@ -360,109 +486,160 @@ func TestBuildFieldSpec_Default(t *testing.T) {
 		if !ok {
 			t.Fatal("DefaultInteger schema not found")
 		}
-		f := buildFieldSpec("res", "field", proxy.Schema(), false, false)
+		f := buildFieldSpec(proxy.Schema(), "res", "field", false, false)
 		// Default is still parsed from schema, but hasDefault logic in schema.go gates its application
 		// The spec layer records it regardless of writability.
 		_ = f
 	})
 }
 
-// --- buildFieldSpecs -----------------------------------------------------------------------------
+// --- isComputedField -----------------------------------------------------------------------------
 
-func TestBuildFieldSpecs(t *testing.T) {
+func TestIsComputedField(t *testing.T) {
 	model := mustParseFixture(t, "schema_components.yaml")
-	proxy, ok := model.Model.Components.Schemas.Get("Resource")
-	if !ok {
-		t.Fatal("Resource schema not found in test spec")
+
+	getSchema := func(name string) *base.Schema {
+		t.Helper()
+		proxy, ok := model.Model.Components.Schemas.Get(name)
+		if !ok {
+			t.Fatalf("schema %q not found", name)
+		}
+		return proxy.Schema()
 	}
 
-	writeFields := map[string]bool{"name": true, "size": true}
-	byName := fieldsByName(buildFieldSpecs("res", proxy.Schema(), writeFields))
-
-	// id: not in write body -> Computed derived from OAS (not writable); IsID set by buildFieldSpecs
-	id := byName["id"]
-	if id == nil {
-		t.Fatal("id field missing")
+	cases := []struct {
+		name      string
+		fieldType string
+		writable  bool
+		schema    *base.Schema
+		want      bool
+	}{
+		{
+			name:      "not writable → always computed regardless of extensions",
+			fieldType: "string", writable: false, schema: &base.Schema{},
+			want: true,
+		},
+		{
+			name:      "writable string without extensions → not computed",
+			fieldType: "string", writable: true, schema: &base.Schema{},
+			want: false,
+		},
+		{
+			name:      "writable x-computed:true → computed",
+			fieldType: "string", writable: true, schema: getSchema("XComputed"),
+			want: true,
+		},
+		{
+			name:      "writable x-computed:false suppresses untyped+default",
+			fieldType: "untyped", writable: true, schema: getSchema("XComputedFalseUntypedDefault"),
+			want: false,
+		},
+		{
+			name:      "writable untyped with default and no extension → computed",
+			fieldType: "untyped",
+			writable:  true,
+			schema:    &base.Schema{Default: &yaml.Node{Kind: yaml.ScalarNode, Value: "hello"}},
+			want:      true,
+		},
+		{
+			name:      "writable untyped without default → not computed",
+			fieldType: "untyped", writable: true, schema: &base.Schema{},
+			want: false,
+		},
 	}
-	if !id.IsID {
-		t.Error("id.IsID should be true")
-	}
-	if !id.Computed {
-		t.Error("id.Computed should be true (id not in write body)")
-	}
-	if id.Writable {
-		t.Error("id.Writable should be false (id not in write body)")
-	}
-	if id.Required {
-		t.Error("id.Required should be false (required && writable = false)")
-	}
-
-	// name: in write body and in schema required
-	name := byName["name"]
-	if name == nil {
-		t.Fatal("name field missing")
-	}
-	if !name.Writable {
-		t.Error("name.Writable should be true")
-	}
-	if !name.Required {
-		t.Error("name.Required should be true")
-	}
-	if name.Computed {
-		t.Error("name.Computed should be false")
-	}
-
-	// size: in write body, not required
-	size := byName["size"]
-	if size == nil {
-		t.Fatal("size field missing")
-	}
-	if !size.Writable {
-		t.Error("size.Writable should be true")
-	}
-	if size.Required {
-		t.Error("size.Required should be false")
-	}
-	if size.Computed {
-		t.Error("size.Computed should be false")
-	}
-
-	// status: readOnly in spec — computed regardless of write body
-	status := byName["status"]
-	if status == nil {
-		t.Fatal("status field missing")
-	}
-	if !status.Computed {
-		t.Error("status.Computed should be true")
-	}
-	if status.Writable {
-		t.Error("status.Writable should be false")
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isComputedField(c.schema, c.fieldType, c.writable, "test field"); got != c.want {
+				t.Errorf("isComputedField(schema, %q, %v, ...) = %v, want %v", c.fieldType, c.writable, got, c.want)
+			}
+		})
 	}
 }
 
-func TestBuildFieldSpecs_ClientSideID(t *testing.T) {
-	// When id is present in the POST body (not readOnly), it must be writable, the
-	// client supplies it. buildFieldSpecs must not force Computed=true in that case.
+// --- isImmutableField ----------------------------------------------------------------------------
+
+func TestIsImmutableField(t *testing.T) {
 	model := mustParseFixture(t, "schema_components.yaml")
-	proxy, ok := model.Model.Components.Schemas.Get("Resource")
-	if !ok {
-		t.Fatal("Resource schema not found in test spec")
+
+	getSchema := func(name string) *base.Schema {
+		t.Helper()
+		proxy, ok := model.Model.Components.Schemas.Get(name)
+		if !ok {
+			t.Fatalf("schema %q not found", name)
+		}
+		return proxy.Schema()
 	}
 
-	writeFields := map[string]bool{"id": true, "name": true, "size": true}
-	byName := fieldsByName(buildFieldSpecs("res", proxy.Schema(), writeFields))
+	cases := []struct {
+		name   string
+		schema *base.Schema
+		want   bool
+	}{
+		{"no extension → false", &base.Schema{}, false},
+		{"x-immutable:true → true", getSchema("Immutable"), true},
+		{"x-immutable:false → false", getSchema("ImmutableFalse"), false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isImmutableField(c.schema, "test field"); got != c.want {
+				t.Errorf("isImmutableField(...) = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
 
-	id := byName["id"]
-	if id == nil {
-		t.Fatal("id field missing")
+// --- isUnorderedField ----------------------------------------------------------------------------
+
+func TestIsUnorderedField(t *testing.T) {
+	model := mustParseFixture(t, "schema_components.yaml")
+
+	getSchema := func(name string) *base.Schema {
+		t.Helper()
+		proxy, ok := model.Model.Components.Schemas.Get(name)
+		if !ok {
+			t.Fatalf("schema %q not found", name)
+		}
+		return proxy.Schema()
 	}
-	if !id.IsID {
-		t.Error("id.IsID should be true")
+
+	cases := []struct {
+		name   string
+		schema *base.Schema
+		want   bool
+	}{
+		{"no extension → false", &base.Schema{}, false},
+		{"x-unordered:true → true", getSchema("ArrayStringUnordered"), true},
+		{"x-unordered:false → false", getSchema("UnorderedFalse"), false},
 	}
-	if !id.Writable {
-		t.Error("id.Writable should be true when id is in POST body")
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isUnorderedField(c.schema, "test field"); got != c.want {
+				t.Errorf("isUnorderedField(...) = %v, want %v", got, c.want)
+			}
+		})
 	}
-	if id.Computed {
-		t.Error("id.Computed should be false when id is in POST body (client-supplied)")
+}
+
+// --- isWritableField -----------------------------------------------------------------------------
+
+func TestIsWritableField(t *testing.T) {
+	trueVal := true
+
+	cases := []struct {
+		name   string
+		param  bool
+		schema *base.Schema
+		want   bool
+	}{
+		{"param writable, no readOnly", true, &base.Schema{}, true},
+		{"param not writable, no readOnly", false, &base.Schema{}, false},
+		{"param writable, readOnly:true → overrides to false", true, &base.Schema{ReadOnly: &trueVal}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isWritableField(c.schema, c.param); got != c.want {
+				t.Errorf("isWritableField(schema, %v) = %v, want %v", c.param, got, c.want)
+			}
+		})
 	}
 }

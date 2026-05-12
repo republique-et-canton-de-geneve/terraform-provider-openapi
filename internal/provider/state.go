@@ -3,6 +3,7 @@ package provider
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/hashicorp/terraform-plugin-framework-jsontypes/jsontypes"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -101,6 +102,17 @@ func attrToJSONField(v attr.Value, f *spec.FieldSpec) any {
 			result = append(result, attrToJSONField(e, itemSpec))
 		}
 		return result
+	case types.Set:
+		elems := t.Elements()
+		result := make([]any, 0, len(elems))
+		var itemSpec *spec.FieldSpec
+		if f != nil {
+			itemSpec = f.ItemSpec
+		}
+		for _, e := range elems {
+			result = append(result, attrToJSONField(e, itemSpec))
+		}
+		return result
 	}
 	return fmt.Sprint(v)
 }
@@ -170,11 +182,36 @@ func jsonToAttrField(v any, t attr.Type, f *spec.FieldSpec) attr.Value {
 			for i, item := range arr {
 				elems[i] = jsonToAttrField(item, at.ElemType, itemSpec)
 			}
+			// x-unordered without uniqueItems: sort so that API reordering is not a diff.
+			if f != nil && f.Unordered && !f.UniqueItems {
+				sort.Slice(elems, func(i, j int) bool {
+					return fmt.Sprint(elems[i]) < fmt.Sprint(elems[j])
+				})
+			}
 			list, _ := types.ListValue(at.ElemType, elems)
 			return list
 		}
 		list, _ := types.ListValue(at.ElemType, []attr.Value{})
 		return list
+	case basetypes.SetType:
+		if v == nil {
+			set, _ := types.SetValue(at.ElemType, []attr.Value{})
+			return set
+		}
+		if arr, ok := v.([]any); ok {
+			elems := make([]attr.Value, len(arr))
+			var itemSpec *spec.FieldSpec
+			if f != nil {
+				itemSpec = f.ItemSpec
+			}
+			for i, item := range arr {
+				elems[i] = jsonToAttrField(item, at.ElemType, itemSpec)
+			}
+			set, _ := types.SetValue(at.ElemType, elems)
+			return set
+		}
+		set, _ := types.SetValue(at.ElemType, []attr.Value{})
+		return set
 	default:
 		return jsonToAttr(v, t)
 	}
@@ -247,6 +284,21 @@ func jsonToAttr(v any, t attr.Type) attr.Value {
 		}
 		list, _ := types.ListValue(at.ElemType, []attr.Value{})
 		return list
+	case basetypes.SetType:
+		if v == nil {
+			set, _ := types.SetValue(at.ElemType, []attr.Value{})
+			return set
+		}
+		if arr, ok := v.([]any); ok {
+			elems := make([]attr.Value, len(arr))
+			for i, item := range arr {
+				elems[i] = jsonToAttr(item, at.ElemType)
+			}
+			set, _ := types.SetValue(at.ElemType, elems)
+			return set
+		}
+		set, _ := types.SetValue(at.ElemType, []attr.Value{})
+		return set
 	}
 	// Fallback: string representation
 	if v == nil {

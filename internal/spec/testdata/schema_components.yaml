@@ -15,15 +15,28 @@ components:
     Immutable:
       type: string
       x-immutable: true
+    ImmutableFalse:
+      type: string
+      x-immutable: false
     XComputed:
       type: string
       x-computed: true
+    XComputedFalseUntypedDefault:
+      x-computed: false
+      default: hello
+    UntypedWithDefault:
+      default: hello
     Sensitive:
       type: string
       x-sensitive: true
     SensitiveOptOut:
       type: string
       x-sensitive: false
+    UnorderedFalse:
+      type: array
+      items:
+        type: string
+      x-unordered: false
     Integer:
       type: integer
     Number:
@@ -52,6 +65,32 @@ components:
             type: integer
           item_name:
             type: string
+    ArrayStringUnordered:
+      type: array
+      items:
+        type: string
+      x-unordered: true
+    ArrayObjectUnordered:
+      type: array
+      items:
+        type: object
+        properties:
+          item_id:
+            type: integer
+          item_name:
+            type: string
+      x-unordered: true
+    ArrayStringUniqueItems:
+      type: array
+      items:
+        type: string
+      uniqueItems: true
+    ArrayStringUnorderedUniqueItems:
+      type: array
+      items:
+        type: string
+      x-unordered: true
+      uniqueItems: true
     Resource:
       type: object
       required:

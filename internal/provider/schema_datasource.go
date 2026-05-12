@@ -54,6 +54,25 @@ func fieldToDataSourceAttr(f *spec.FieldSpec) dsschema.Attribute {
 		}
 		return dsschema.SingleNestedAttribute{Computed: true, Attributes: nested}
 	case "array":
+		if f.Unordered && f.UniqueItems {
+			// Set: unordered + unique.
+			if f.ItemSpec != nil && f.ItemSpec.Type == "object" {
+				nested := make(map[string]dsschema.Attribute, len(f.ItemSpec.Nested))
+				for _, nf := range f.ItemSpec.Nested {
+					nested[nf.Name] = fieldToDataSourceAttr(nf)
+				}
+				return dsschema.SetNestedAttribute{
+					Computed:     true,
+					NestedObject: dsschema.NestedAttributeObject{Attributes: nested},
+				}
+			}
+			elemType := attr.Type(types.StringType)
+			if f.ItemSpec != nil {
+				elemType = fieldToDataSourceAttrType(f.ItemSpec)
+			}
+			return dsschema.SetAttribute{Computed: true, ElementType: elemType}
+		}
+		// All other cases: List (sorted on read when x-unordered; validated when uniqueItems).
 		if f.ItemSpec != nil && f.ItemSpec.Type == "object" {
 			nested := make(map[string]dsschema.Attribute, len(f.ItemSpec.Nested))
 			for _, nf := range f.ItemSpec.Nested {
@@ -94,6 +113,12 @@ func fieldToDataSourceAttrType(f *spec.FieldSpec) attr.Type {
 		}
 		return types.ObjectType{AttrTypes: nested}
 	case "array":
+		if f.Unordered && f.UniqueItems {
+			if f.ItemSpec != nil {
+				return types.SetType{ElemType: fieldToDataSourceAttrType(f.ItemSpec)}
+			}
+			return types.SetType{ElemType: types.StringType}
+		}
 		if f.ItemSpec != nil {
 			return types.ListType{ElemType: fieldToDataSourceAttrType(f.ItemSpec)}
 		}
