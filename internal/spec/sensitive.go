@@ -26,7 +26,7 @@ var sensitiveKeywords = []string{
 // x-sensitive: true forces sensitive regardless of the field name.
 // x-sensitive: false suppresses the name-heuristic (opt-out).
 // When absent, the lowercase field name is checked against sensitiveKeywords.
-func isSensitiveField(name string, schema *base.Schema) bool {
+func isSensitiveField(schema *base.Schema, name string) bool {
 	if v, found := boolExtension(schema, "x-sensitive", "field "+name); found {
 		return v
 	}

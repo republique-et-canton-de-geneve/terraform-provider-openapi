@@ -41,9 +41,9 @@ func TestIsSensitiveField(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isSensitiveField(tt.fieldName, nil)
+			got := isSensitiveField(nil, tt.fieldName)
 			if got != tt.want {
-				t.Errorf("isSensitiveField(%q) = %v, want %v", tt.fieldName, got, tt.want)
+				t.Errorf("isSensitiveField(nil, %q) = %v, want %v", tt.fieldName, got, tt.want)
 			}
 		})
 	}
