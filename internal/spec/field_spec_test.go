@@ -23,6 +23,7 @@ func TestBuildFieldSpecs(t *testing.T) {
 	id := byName["id"]
 	if id == nil {
 		t.Fatal("id field missing")
+		return
 	}
 	if !id.IsID {
 		t.Error("id.IsID should be true")
@@ -41,6 +42,7 @@ func TestBuildFieldSpecs(t *testing.T) {
 	name := byName["name"]
 	if name == nil {
 		t.Fatal("name field missing")
+		return
 	}
 	if !name.Writable {
 		t.Error("name.Writable should be true")
@@ -56,6 +58,7 @@ func TestBuildFieldSpecs(t *testing.T) {
 	size := byName["size"]
 	if size == nil {
 		t.Fatal("size field missing")
+		return
 	}
 	if !size.Writable {
 		t.Error("size.Writable should be true")
@@ -71,6 +74,7 @@ func TestBuildFieldSpecs(t *testing.T) {
 	status := byName["status"]
 	if status == nil {
 		t.Fatal("status field missing")
+		return
 	}
 	if !status.Computed {
 		t.Error("status.Computed should be true")
@@ -95,6 +99,7 @@ func TestBuildFieldSpecs_ClientSideID(t *testing.T) {
 	id := byName["id"]
 	if id == nil {
 		t.Fatal("id field missing")
+		return
 	}
 	if !id.IsID {
 		t.Error("id.IsID should be true")

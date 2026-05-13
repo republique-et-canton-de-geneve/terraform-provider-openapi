@@ -155,6 +155,10 @@ func (self *Client) Delete(ctx context.Context, path string, readTimeout time.Du
 			return fmt.Errorf("DELETE %s: %w", path, err)
 		}
 		resp, err := self.resty.R().SetContext(ctx).Delete(path)
+		if err == nil && resp != nil && resp.StatusCode() == http.StatusNotFound {
+			self.logCall(ctx, self.okLevel, resp, nil)
+			return nil
+		}
 		if err = self.handle(ctx, resp, err, http.StatusNoContent, http.StatusOK); err != nil {
 			if attempt < conflictMaxAttempts && resp != nil &&
 				resp.StatusCode() == http.StatusConflict {
