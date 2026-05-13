@@ -91,21 +91,54 @@ make lint
 
 ### Acceptance tests
 
-Acceptance tests create and destroy real resources on a live API instance.
-
-Set the required environment variables:
-
-```shell
-export OPENAPI_SPEC=/path/to/spec.yaml
-export OPENAPI_URL=https://api.example.com/v1
-export OPENAPI_TOKEN=my-token
-```
-
-Then run:
+Acceptance tests (`TestAcc*`) exercise full CRUD lifecycles against a live HTTP server.
+The `make testacc` action handles the entire server lifecycle automatically:
 
 ```shell
 make testacc
 ```
+
+What it does, in order:
+
+1. Creates a Python venv at `testacc/server/.venv` (idempotent)
+2. Installs dependencies from `testacc/server/requirements.txt`
+3. Wipes any leftover SQLite database for a clean run
+4. Runs Django migrations
+5. Starts the Django/DRF test server in the background
+6. Polls `/health/` until the server is ready
+7. Runs `go test ./... -v` with `TF_ACC=1`
+8. On exit (pass, fail, or Ctrl-C) kills the server and removes the database
+
+**Requirements:** Python 3.12+ on `$PATH`.
+
+#### Test server
+
+`testacc/server/` is a minimal Django 5 + DRF API that implements the `widgets` resource.
+It serves its own OAS3 schema at `/api/schema/`, which the provider loads at startup via
+`OPENAPI_SPEC`. The schema uses `COMPONENT_SPLIT_REQUEST=True` so that server-computed fields
+(`id`, `created_at`) are excluded from the POST body; the provider does not expose them as
+user-settable attributes.
+
+#### Against an external server
+
+If you have the test server running elsewhere (e.g. in Docker), pass `OPENAPI_URL` to skip the
+local server startup:
+
+```shell
+# Docker
+cd testacc/server && docker compose up -d
+make testacc OPENAPI_URL=http://localhost:8000   # or pass as env var
+
+# Remote
+OPENAPI_URL=http://192.168.1.10:8000 make testacc
+```
+
+#### CI
+
+The GitHub Actions workflow (`.github/workflows/testacc.yml`) manages the server lifecycle
+directly (setup-python, pip install, migrate, runserver) and calls `make testacc` with
+`OPENAPI_URL` set, so the Makefile skips the local server block. Tests run against
+Terraform 1.13, 1.14, and 1.15.
 
 ### Running locally
 
