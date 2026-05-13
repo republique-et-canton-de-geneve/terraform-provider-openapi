@@ -35,3 +35,9 @@ website/vendor
 *.winfile eol=crlf
 
 terraform-provider-openapi
+
+# Python / Django test server
+__pycache__/
+*.pyc
+testacc/server/db.sqlite3
+testacc/server/.venv/
