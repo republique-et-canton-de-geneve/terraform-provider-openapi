@@ -1,5 +1,24 @@
 # Changelog
 
+
+## Release v0.1.3 (2026-05-13)
+
+Diff: https://github.com/republique-et-canton-de-geneve/terraform-provider-openapi/compare/v0.1.2...v0.1.3
+
+### Features
+
+* Add acceptance test suite for the `widget` resource; see [Acceptance tests](README.md#acceptance-tests)
+  for setup and local-run instructions
+* Add GitHub Actions CI workflow running acceptance tests against Terraform 1.13, 1.14, and 1.15
+  with all action steps pinned to commit SHAs
+
+### Fix and enhancements
+
+* Treat HTTP 404 as success on `DELETE`: a resource already absent is considered destroyed,
+  preventing spurious errors on `terraform destroy` or the `disappears` test
+* Fix `SA5011` staticcheck false positives in test files: add `return` after `t.Fatal` nil guards
+
+
 ## Release v0.1.2 (2026-05-12)
 
 Diff: https://github.com/republique-et-canton-de-geneve/terraform-provider-openapi/compare/v0.1.1...v0.1.2
