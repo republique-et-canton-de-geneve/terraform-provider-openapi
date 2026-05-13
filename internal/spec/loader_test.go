@@ -75,6 +75,7 @@ func TestLoadModel_ValidFile(t *testing.T) {
 	}
 	if model == nil {
 		t.Fatal("expected non-nil model")
+		return
 	}
 	if model.Model.Info.Title != "Loader Test" {
 		t.Errorf("Title = %q, want %q", model.Model.Info.Title, "Loader Test")

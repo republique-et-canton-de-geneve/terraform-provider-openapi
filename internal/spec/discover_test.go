@@ -69,6 +69,7 @@ func TestDiscoverResources_FullCRUD(t *testing.T) {
 	id := byName["id"]
 	if id == nil {
 		t.Fatal("id field missing")
+		return
 	}
 	if !id.IsID || !id.Computed || id.Writable {
 		t.Errorf("id: IsID=%v Computed=%v Writable=%v, want true/true/false",
@@ -78,6 +79,7 @@ func TestDiscoverResources_FullCRUD(t *testing.T) {
 	name := byName["name"]
 	if name == nil {
 		t.Fatal("name field missing")
+		return
 	}
 	if !name.Writable || !name.Required || name.Computed {
 		t.Errorf("name: Writable=%v Required=%v Computed=%v, want true/true/false",
@@ -87,6 +89,7 @@ func TestDiscoverResources_FullCRUD(t *testing.T) {
 	createdAt := byName["created_at"]
 	if createdAt == nil {
 		t.Fatal("created_at field missing")
+		return
 	}
 	if !createdAt.Computed || createdAt.Writable {
 		t.Errorf("created_at: Computed=%v Writable=%v, want true/false",
@@ -245,6 +248,7 @@ paths:
 	petName := byName["pet_name"]
 	if petName == nil {
 		t.Fatal("field 'pet_name' missing (expected snake_case conversion of 'petName')")
+		return
 	}
 	if petName.OASName != "petName" {
 		t.Errorf("pet_name.OASName = %q, want %q", petName.OASName, "petName")
@@ -253,6 +257,7 @@ paths:
 	photoUrls := byName["photo_urls"]
 	if photoUrls == nil {
 		t.Fatal("field 'photo_urls' missing (expected snake_case conversion of 'photoUrls')")
+		return
 	}
 	if photoUrls.OASName != "photoUrls" {
 		t.Errorf("photo_urls.OASName = %q, want %q", photoUrls.OASName, "photoUrls")
@@ -390,6 +395,7 @@ func TestDiscoverResources_Validation(t *testing.T) {
 		f := byName["name"]
 		if f == nil {
 			t.Fatal("field name missing")
+			return
 		}
 		if f.MaxLength == nil || *f.MaxLength != 255 {
 			t.Errorf("MaxLength = %v, want 255", f.MaxLength)
@@ -400,6 +406,7 @@ func TestDiscoverResources_Validation(t *testing.T) {
 		f := byName["code"]
 		if f == nil {
 			t.Fatal("field code missing")
+			return
 		}
 		if f.Pattern != `^[0-9]{4,5}$` {
 			t.Errorf("Pattern = %q, want ^[0-9]{4,5}$", f.Pattern)
@@ -413,6 +420,7 @@ func TestDiscoverResources_Validation(t *testing.T) {
 		f := byName["disk_size"]
 		if f == nil {
 			t.Fatal("field disk_size missing")
+			return
 		}
 		if f.Minimum == nil || *f.Minimum != 0 {
 			t.Errorf("Minimum = %v, want 0", f.Minimum)
@@ -426,6 +434,7 @@ func TestDiscoverResources_Validation(t *testing.T) {
 		f := byName["choice"]
 		if f == nil {
 			t.Fatal("field choice missing")
+			return
 		}
 		want := map[string]bool{"A": true, "B": true, "C": true, "D": true}
 		if len(f.Enum) != len(want) {
@@ -442,6 +451,7 @@ func TestDiscoverResources_Validation(t *testing.T) {
 		f := byName["choice_direct"]
 		if f == nil {
 			t.Fatal("field choice_direct missing")
+			return
 		}
 		want := map[string]bool{"A": true, "B": true, "C": true, "D": true}
 		if len(f.Enum) != len(want) {
@@ -458,6 +468,7 @@ func TestDiscoverResources_Validation(t *testing.T) {
 		f := byName["domain"]
 		if f == nil {
 			t.Fatal("field domain missing")
+			return
 		}
 		want := map[string]bool{"A": true, "B": true, "C": true, "D": true, "": true}
 		if len(f.Enum) != len(want) {
@@ -474,6 +485,7 @@ func TestDiscoverResources_Validation(t *testing.T) {
 		f := byName["state"]
 		if f == nil {
 			t.Fatal("field state missing")
+			return
 		}
 		if !f.Computed || f.Writable {
 			t.Errorf("state: Computed=%v Writable=%v, want true/false", f.Computed, f.Writable)
